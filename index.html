@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Team Servis</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+    body { background: #e0e0e0; display: flex; justify-content: center; height: 100vh; }
+    .app-container { width: 100%; max-width: 480px; background: #fff; display: flex; flex-direction: column; height: 100vh; box-shadow: 0 2px 14px rgba(0,0,0,0.25); position: relative; }
+    .wa-header { background: #b71c1c; color: #fff; padding: 12px 16px 0 16px; }
+    .wa-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .brand-box h2 { font-size: 20px; font-weight: 700; letter-spacing: 0.3px; }
+    .owner-tag { font-size: 11px; background: rgba(255,255,255,0.18); padding: 2px 8px; border-radius: 10px; display: inline-block; margin-top: 2px; font-weight: 500; }
+    .wa-icons button { background: none; border: none; color: #fff; font-size: 17px; margin-left: 12px; cursor: pointer; }
+    .wa-tabs { display: flex; }
+    .wa-tab { flex: 1; text-align: center; padding: 10px 0; font-size: 13px; font-weight: bold; color: rgba(255,255,255,0.75); cursor: pointer; border-bottom: 3px solid transparent; }
+    .wa-tab.active { color: #fff; border-bottom: 3px solid #fff; }
+    .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+    .screen.active { display: flex; }
+    .tab-view { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
+    .tab-view.active { display: flex; }
+    .login-box { padding: 30px 24px; display: flex; flex-direction: column; justify-content: center; flex: 1; gap: 14px; }
+    .login-box h3 { color: #b71c1c; text-align: center; font-size: 22px; }
+    .e2e-badge { text-align: center; font-size: 12px; color: #555; background: #ffebee; padding: 6px 10px; border-radius: 8px; border: 1px solid #ffcdd2; }
+    input, textarea { padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; width: 100%; outline: none; }
+    input:focus { border-color: #b71c1c; }
+    button.btn-wa { background: #b71c1c; color: #fff; border: none; padding: 13px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    #status-msg { text-align: center; color: #b71c1c; font-size: 13px; min-height: 18px; font-weight: 500; }
+    .list-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #f2f2f2; cursor: pointer; gap: 14px; }
+    .list-item:hover { background: #fff5f5; }
+    .avatar { width: 48px; height: 48px; border-radius: 50%; background: #d32f2f; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 19px; flex-shrink: 0; }
+    .avatar.group { background: #8e0000; }
+    .avatar.status-ring { border: 3px solid #d32f2f; padding: 2px; }
+    .item-info { flex: 1; overflow: hidden; }
+    .item-info h4 { font-size: 16px; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-info p { font-size: 13px; color: #667781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .fab { position: absolute; bottom: 20px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: #b71c1c; color: #fff; border: none; font-size: 24px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .chat-header { background: #b71c1c; color: #fff; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+    .chat-header-left { display: flex; align-items: center; gap: 10px; }
+    .messages { flex: 1; padding: 14px; overflow-y: auto; background: #fafafa; display: flex; flex-direction: column; gap: 8px; }
+    .e2e-notice { text-align: center; font-size: 11px; color: #7f0000; background: #ffebee; padding: 6px 12px; border-radius: 8px; margin-bottom: 6px; align-self: center; }
+    .msg { max-width: 78%; padding: 8px 12px; border-radius: 8px; font-size: 15px; line-height: 1.4; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .msg.me { align-self: flex-end; background: #ffcdd2; color: #111; border-top-right-radius: 0; }
+    .msg.them { align-self: flex-start; background: #fff; color: #111; border: 1px solid #eee; border-top-left-radius: 0; }
+    .msg-sender { font-size: 11px; font-weight: bold; color: #b71c1c; margin-bottom: 2px; }
+    .msg img, .msg video { max-width: 100%; border-radius: 6px; margin-top: 4px; display: block; cursor: pointer; }
+    .chat-input { display: flex; padding: 8px 10px; background: #f5f5f5; gap: 8px; align-items: center; border-top: 1px solid #e0e0e0; }
+    .chat-input input[type="text"] { border-radius: 24px; border: 1px solid #ddd; padding: 11px 16px; background: #fff; }
+    .icon-btn { background: #fff; color: #b71c1c; border: 1px solid #ddd; width: 42px; height: 42px; border-radius: 50%; font-size: 19px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .send-btn { background: #b71c1c; color: #fff; border: none; width: 44px; height: 44px; border-radius: 50%; font-size: 18px; cursor: pointer; flex-shrink: 0; }
+    .modal { display: none; position: absolute; inset: 0; background: #fff; flex-direction: column; z-index: 10; }
+    .modal.active { display: flex; }
+    .status-viewer { display: none; position: absolute; inset: 0; background: #8e0000; color: #fff; flex-direction: column; justify-content: center; align-items: center; padding: 30px; text-align: center; z-index: 20; }
+    .status-viewer.active { display: flex; }
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <div id="login-screen" class="screen active">
+    <div class="wa-header" style="padding-bottom:12px;">
+      <div class="wa-top" style="margin:0;">
+        <div class="brand-box">
+          <h2>Team Servis</h2>
+          <span class="owner-tag">Owner: Rehan Nasir</span>
+        </div>
+      </div>
+    </div>
+    <div class="login-box">
+      <h3>Team Servis Login</h3>
+      <div class="e2e-badge">🔒 End-to-End Encrypted • Private Contacts Only</div>
+      <input type="text" id="user-name" placeholder="Apna Naam (e.g. Rehan)" />
+      <input type="tel" id="phone-number" placeholder="Mobile Number (e.g. 03001234567)" />
+      <input type="password" id="team-code" placeholder="Team Secret Code" />
+      <button class="btn-wa" id="login-btn">Agree & Continue</button>
+      <p id="status-msg"></p>
+    </div>
+  </div>
+
+  <div id="home-screen" class="screen">
+    <div class="wa-header">
+      <div class="wa-top">
+        <div class="brand-box">
+          <h2>Team Servis</h2>
+          <span class="owner-tag">Owner: Rehan Nasir</span>
+        </div>
+        <div class="wa-icons">
+          <button id="add-contact-btn" title="Save Contact">👤+</button>
+          <button id="new-group-btn" title="New Group">👥+</button>
+          <button id="refresh-btn" title="Refresh">↻</button>
+          <button id="logout-btn" title="Logout">⏻</button>
+        </div>
+      </div>
+      <div class="wa-tabs">
+        <div class="wa-tab active" data-tab="chats-view">CHATS</div>
+        <div class="wa-tab" data-tab="status-view">STATUS</div>
+        <div class="wa-tab" data-tab="calls-view">CALLS</div>
+      </div>
+    </div>
+
+    <div id="chats-view" class="tab-view active">
+      <div style="padding:8px 12px; background:#fff; border-bottom:1px solid #f0f0f0;">
+        <input type="text" id="search-contact-input" placeholder="Search saved contacts..." style="padding:8px 12px; font-size:14px; border-radius:20px;" />
+      </div>
+      <div id="chats-list"></div>
+      <button class="fab" id="fab-contact-btn" title="Add Contact">👤+</button>
+    </div>
+
+    <div id="status-view" class="tab-view">
+      <div class="list-item" id="add-status-item">
+        <div class="avatar">+</div>
+        <div class="item-info">
+          <h4>My Status</h4>
+          <p>Tap to add team status update</p>
+        </div>
+      </div>
+      <div style="padding: 8px 16px; background: #f5f5f5; font-size: 12px; font-weight: bold; color: #666;">CONTACTS UPDATES</div>
+      <div id="status-list"></div>
+    </div>
+
+    <div id="calls-view" class="tab-view">
+      <div id="calls-list"></div>
+    </div>
+  </div>
+
+  <div id="chat-screen" class="screen">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="back-btn" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">←</button>
+        <div>
+          <h3 id="chat-title" style="font-size:17px;">Name</h3>
+          <p id="chat-subtitle" style="font-size:11px; opacity:0.9;">🔒 End-to-End Encrypted</p>
+        </div>
+      </div>
+      <div class="wa-icons">
+        <button id="video-call-btn" title="Video Call">📹</button>
+        <button id="voice-call-btn" title="Voice Call">📞</button>
+      </div>
+    </div>
+    <div id="upload-banner" style="display:none; background:#d32f2f; color:#fff; text-align:center; padding:6px; font-size:13px;">Encrypting & sending media...</div>
+    <div class="messages" id="messages-container"></div>
+    <div class="chat-input">
+      <input type="file" id="media-picker" accept="image/*,video/*" style="display:none;" />
+      <button class="icon-btn" id="attach-btn" title="Send Photo or Video">📎</button>
+      <input type="text" id="msg-input" placeholder="Encrypted message..." />
+      <button class="send-btn" id="send-msg-btn">➤</button>
+    </div>
+  </div>
+
+  <div id="contact-modal" class="modal">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="close-contact-modal" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">←</button>
+        <h3 style="font-size:17px;">New Contact</h3>
+      </div>
+    </div>
+    <div style="padding:24px; display:flex; flex-direction:column; gap:14px;">
+      <p style="font-size:13px; color:#555;">Sirf wohi numbers aapki chat list mein show honge jo aap yahan save karenge aur Team Servis par registered honge.</p>
+      <input type="text" id="new-contact-name" placeholder="Contact Name (e.g. Ali Raza)" />
+      <input type="tel" id="new-contact-phone" placeholder="Mobile Number (e.g. 03001234567)" />
+      <button class="btn-wa" id="save-contact-submit">Save Contact ✔</button>
+    </div>
+  </div>
+
+  <div id="group-modal" class="modal">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="close-group-modal" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">←</button>
+        <h3 style="font-size:17px;">New Group - Add Members</h3>
+      </div>
+    </div>
+    <div style="padding:16px; border-bottom:1px solid #eee;">
+      <input type="text" id="group-name-input" placeholder="Group Name (e.g. Servis Management)" />
+    </div>
+    <div style="padding:8px 16px; background:#f5f5f5; font-size:12px; font-weight:bold; color:#666;">SELECT SAVED CONTACTS</div>
+    <div id="group-members-checklist" style="flex:1; overflow-y:auto;"></div>
+    <div style="padding:14px;">
+      <button class="btn-wa" id="create-group-submit" style="width:100%;">Create Group ✔</button>
+    </div>
+  </div>
+
+  <div id="status-modal" class="modal">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="close-status-modal" style="background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">←</button>
+        <h3 style="font-size:17px;">Post Status Update</h3>
+      </div>
+    </div>
+    <div style="padding:20px; display:flex; flex-direction:column; gap:14px; flex:1; justify-content:center;">
+      <textarea id="status-text-input" rows="4" placeholder="Apne saved contacts ke liye update likhein..."></textarea>
+      <button class="btn-wa" id="post-status-submit">Share Status ➤</button>
+    </div>
+  </div>
+
+  <div id="status-viewer" class="status-viewer">
+    <h4 id="viewer-author" style="position:absolute; top:20px; left:20px;">Member</h4>
+    <button id="close-viewer" style="position:absolute; top:16px; right:20px; background:none; border:none; color:#fff; font-size:24px; cursor:pointer;">✕</button>
+    <p id="viewer-text" style="font-size:24px; line-height:1.5; font-weight:500;"></p>
+  </div>
+</div>
+<script src="./app.js?v=7"></script>
+</body>
+</html>
