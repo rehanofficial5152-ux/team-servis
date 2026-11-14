@@ -6,68 +6,66 @@
   <title>Team Servis</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
-    html, body { width: 100%; height: 100%; background: #e0e0e0; display: flex; justify-content: center; overflow: hidden; }
-    .app-container { width: 100%; max-width: 430px; background: #fff; display: flex; flex-direction: column; height: 100%; box-shadow: 0 2px 12px rgba(0,0,0,0.2); position: relative; overflow: hidden; }
-    
-    /* Compact Red & White Header */
+    html, body { width: 100%; height: 100%; background: #dcdcdc; display: flex; justify-content: center; overflow: hidden; }
+    .app-container { width: 100%; max-width: 420px; background: #fff; display: flex; flex-direction: column; height: 100%; box-shadow: 0 2px 14px rgba(0,0,0,0.25); position: relative; overflow: hidden; }
     .wa-header { background: #b71c1c; color: #fff; padding: 10px 14px 0 14px; }
     .wa-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .brand-box h2 { font-size: 18px; font-weight: 700; }
-    .owner-tag { font-size: 10px; background: rgba(255,255,255,0.2); padding: 1px 7px; border-radius: 10px; display: inline-block; }
+    .brand-box { display: flex; align-items: center; gap: 8px; }
+    .my-dp-mini { width: 34px; height: 34px; border-radius: 50%; background: #fff; color: #b71c1c; font-weight: bold; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; border: 1.5px solid #fff; font-size: 14px; }
+    .my-dp-mini img { width: 100%; height: 100%; object-fit: cover; }
+    .brand-box h2 { font-size: 17px; font-weight: 700; line-height: 1.1; }
+    .owner-tag { font-size: 9.5px; background: rgba(255,255,255,0.2); padding: 1px 6px; border-radius: 8px; display: inline-block; }
     .wa-icons button { background: none; border: none; color: #fff; font-size: 16px; margin-left: 10px; cursor: pointer; }
     .wa-tabs { display: flex; }
     .wa-tab { flex: 1; text-align: center; padding: 8px 0; font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.75); cursor: pointer; border-bottom: 3px solid transparent; }
     .wa-tab.active { color: #fff; border-bottom: 3px solid #fff; }
-
-    /* Screens & Views */
     .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; }
     .screen.active { display: flex; }
     .tab-view { display: none; flex: 1; flex-direction: column; overflow-y: auto; }
     .tab-view.active { display: flex; }
-
-    /* Login */
-    .login-box { padding: 24px 20px; display: flex; flex-direction: column; justify-content: center; flex: 1; gap: 12px; }
+    .login-box { padding: 24px 20px; display: flex; flex-direction: column; justify-content: center; flex: 1; gap: 11px; }
     .login-box h3 { color: #b71c1c; text-align: center; font-size: 20px; }
-    .e2e-badge { text-align: center; font-size: 11px; color: #555; background: #ffebee; padding: 5px 8px; border-radius: 6px; border: 1px solid #ffcdd2; }
+    .e2e-badge { text-align: center; font-size: 11px; color: #7f0000; background: #ffebee; padding: 5px; border-radius: 6px; border: 1px solid #ffcdd2; }
     input, textarea { padding: 10px 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; width: 100%; outline: none; }
     button.btn-wa { background: #b71c1c; color: #fff; border: none; padding: 11px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; }
     #status-msg { text-align: center; color: #b71c1c; font-size: 12px; min-height: 16px; }
-
-    /* Compact List Items */
-    .list-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid #f2f2f2; cursor: pointer; gap: 12px; }
+    .list-item { display: flex; align-items: center; padding: 10px 14px; border-bottom: 1px solid #f2f2f2; cursor: pointer; gap: 11px; }
     .list-item:hover { background: #fff5f5; }
-    .avatar { width: 42px; height: 42px; border-radius: 50%; background: #d32f2f; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 17px; flex-shrink: 0; }
+    .avatar { width: 44px; height: 44px; border-radius: 50%; background: #d32f2f; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 17px; flex-shrink: 0; overflow: hidden; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
     .avatar.group { background: #8e0000; }
     .avatar.status-ring { border: 2.5px solid #d32f2f; padding: 2px; }
     .item-info { flex: 1; overflow: hidden; }
+    .item-top { display: flex; justify-content: space-between; align-items: center; }
     .item-info h4 { font-size: 15px; color: #111b21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .item-info p { font-size: 12px; color: #667781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
-    .badge-unread { background: #d32f2f; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px; }
-
+    .item-time { font-size: 10.5px; color: #667781; flex-shrink: 0; }
+    .item-sub { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
+    .item-info p { font-size: 12.5px; color: #667781; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .badge-unread { background: #d32f2f; color: #fff; font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 10px; flex-shrink: 0; }
     .fab { position: absolute; bottom: 16px; right: 16px; width: 50px; height: 50px; border-radius: 50%; background: #b71c1c; color: #fff; border: none; font-size: 20px; box-shadow: 0 3px 8px rgba(0,0,0,0.3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-    /* Compact Chat Screen */
     .chat-header { background: #b71c1c; color: #fff; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; }
-    .chat-header-left { display: flex; align-items: center; gap: 8px; }
+    .chat-header-left { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+    .chat-dp { width: 36px; height: 36px; border-radius: 50%; background: #fff; color: #b71c1c; display: flex; align-items: center; justify-content: center; font-weight: bold; overflow: hidden; flex-shrink: 0; }
+    .chat-dp img { width: 100%; height: 100%; object-fit: cover; }
     .messages { flex: 1; padding: 10px 12px; overflow-y: auto; background: #efeae2; display: flex; flex-direction: column; gap: 6px; }
     .msg { max-width: 78%; padding: 6px 10px; border-radius: 8px; font-size: 14px; line-height: 1.35; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
     .msg.me { align-self: flex-end; background: #ffcdd2; color: #111; border-top-right-radius: 0; }
     .msg.them { align-self: flex-start; background: #fff; color: #111; border-top-left-radius: 0; }
-    .msg-sender { font-size: 10px; font-weight: bold; color: #b71c1c; margin-bottom: 1px; }
+    .msg-sender { font-size: 10.5px; font-weight: bold; color: #b71c1c; margin-bottom: 1px; }
+    .msg-quote { background: rgba(0,0,0,0.06); border-left: 3px solid #b71c1c; padding: 4px 6px; font-size: 11.5px; border-radius: 4px; margin-bottom: 4px; color: #444; }
     .msg-meta { font-size: 10px; color: #555; text-align: right; margin-top: 2px; display: flex; justify-content: flex-end; align-items: center; gap: 3px; }
-    .ticks { font-weight: bold; font-size: 11px; color: #666; }
+    .ticks { font-weight: bold; font-size: 11.5px; color: #777; letter-spacing: -1px; }
     .ticks.read { color: #0288d1; }
     .msg img, .msg video { max-width: 100%; border-radius: 6px; margin-top: 3px; display: block; cursor: pointer; }
     .msg audio { max-width: 200px; height: 32px; margin-top: 3px; }
-    .chat-input { display: flex; padding: 6px 8px; background: #f0f2f5; gap: 6px; align-items: center; }
-    .chat-input input[type="text"] { border-radius: 20px; border: none; padding: 9px 14px; background: #fff; font-size: 14px; }
-    .icon-btn { background: #fff; color: #b71c1c; border: none; width: 36px; height: 36px; border-radius: 50%; font-size: 16px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .reply-bar { display: none; background: #f8f8f8; padding: 6px 12px; border-top: 1px solid #ddd; border-left: 4px solid #b71c1c; justify-content: space-between; align-items: center; font-size: 12px; }
+    .chat-input { display: flex; padding: 6px 8px; background: #f0f2f5; gap: 5px; align-items: center; }
+    .chat-input input[type="text"] { border-radius: 20px; border: none; padding: 9px 12px; background: #fff; font-size: 14px; }
+    .icon-btn { background: #fff; color: #b71c1c; border: none; width: 35px; height: 35px; border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
     .icon-btn.recording { background: #d32f2f; color: #fff; animation: pulse 1s infinite; }
     @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-    .send-btn { background: #b71c1c; color: #fff; border: none; width: 38px; height: 38px; border-radius: 50%; font-size: 16px; cursor: pointer; flex-shrink: 0; }
-
-    /* Modals & Call Overlay */
-    .modal { display: none; position: absolute; inset: 0; background: #fff; flex-direction: column; z-index: 15; }
+    .send-btn { background: #b71c1c; color: #fff; border: none; width: 37px; height: 37px; border-radius: 50%; font-size: 15px; cursor: pointer; flex-shrink: 0; }
+    .modal { display: none; position: absolute; inset: 0; background: #fff; flex-direction: column; z-index: 15; overflow-y: auto; }
     .modal.active { display: flex; }
     .status-viewer { display: none; position: absolute; inset: 0; background: #8e0000; color: #fff; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; z-index: 20; }
     .status-viewer.active { display: flex; }
@@ -85,17 +83,15 @@
   <div id="login-screen" class="screen active">
     <div class="wa-header" style="padding-bottom:10px;">
       <div class="wa-top" style="margin:0;">
-        <div class="brand-box">
-          <h2>Team Servis</h2>
-          <span class="owner-tag">Owner: Rehan Nasir</span>
-        </div>
+        <div class="brand-box"><div><h2>Team Servis</h2><span class="owner-tag">Owner: Rehan Nasir</span></div></div>
       </div>
     </div>
     <div class="login-box">
       <h3>Team Servis Login</h3>
-      <div class="e2e-badge">🔒 End-to-End Encrypted • Private Contacts</div>
-      <input type="text" id="user-name" placeholder="Apna Naam (e.g. Rehan)" />
+      <div class="e2e-badge">?? End-to-End Encrypted � WhatsApp Experience</div>
+      <input type="text" id="user-name" placeholder="Your Full Name (e.g. Rehan)" />
       <input type="tel" id="phone-number" placeholder="Mobile Number (e.g. 03001234567)" />
+      <input type="text" id="user-about" placeholder="About / Designation (e.g. Manager)" />
       <input type="password" id="team-code" placeholder="Team Secret Code" />
       <button class="btn-wa" id="login-btn">Agree & Continue</button>
       <p id="status-msg"></p>
@@ -106,14 +102,14 @@
     <div class="wa-header">
       <div class="wa-top">
         <div class="brand-box">
-          <h2>Team Servis</h2>
-          <span class="owner-tag">Owner: Rehan Nasir</span>
+          <div class="my-dp-mini" id="open-profile-btn" title="Edit Profile DP & About">??</div>
+          <div><h2>Team Servis</h2><span class="owner-tag">Owner: Rehan Nasir</span></div>
         </div>
         <div class="wa-icons">
-          <button id="add-contact-btn" title="Sync Phone Contacts">👤+</button>
-          <button id="new-group-btn" title="New Group">👥+</button>
-          <button id="refresh-btn" title="Refresh">↻</button>
-          <button id="logout-btn" title="Logout">⏻</button>
+          <button id="add-contact-btn" title="Contacts">??+</button>
+          <button id="new-group-btn" title="New Group">??+</button>
+          <button id="refresh-btn" title="Refresh">?</button>
+          <button id="logout-btn" title="Logout">?</button>
         </div>
       </div>
       <div class="wa-tabs">
@@ -125,124 +121,138 @@
 
     <div id="chats-view" class="tab-view active">
       <div style="padding:6px 10px; background:#fff; border-bottom:1px solid #f0f0f0;">
-        <input type="text" id="search-contact-input" placeholder="Search contacts..." style="padding:7px 12px; font-size:13px; border-radius:18px;" />
+        <input type="text" id="search-contact-input" placeholder="Search saved contacts..." style="padding:7px 12px; font-size:13px; border-radius:18px;" />
       </div>
       <div id="chats-list"></div>
-      <button class="fab" id="fab-contact-btn" title="Open Phone Contacts">👤+</button>
+      <button class="fab" id="fab-contact-btn" title="Open Phone Contacts">??+</button>
     </div>
 
     <div id="status-view" class="tab-view">
       <div class="list-item" id="add-status-item">
         <div class="avatar">+</div>
-        <div class="item-info">
-          <h4>My Status</h4>
-          <p>Tap to add status update</p>
-        </div>
+        <div class="item-info"><h4>My Status</h4><p>Tap to add status update</p></div>
       </div>
       <div style="padding: 6px 14px; background: #f5f5f5; font-size: 11px; font-weight: bold; color: #666;">RECENT UPDATES</div>
       <div id="status-list"></div>
     </div>
 
-    <div id="calls-view" class="tab-view">
-      <div id="calls-list"></div>
-    </div>
+    <div id="calls-view" class="tab-view"><div id="calls-list"></div></div>
   </div>
 
   <div id="chat-screen" class="screen">
     <div class="chat-header">
       <div class="chat-header-left">
-        <button id="back-btn" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">←</button>
-        <div>
-          <h3 id="chat-title" style="font-size:15px;">Name</h3>
-          <p id="chat-subtitle" style="font-size:10px; opacity:0.9;">🔒 End-to-End Encrypted</p>
+        <button id="back-btn" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">?</button>
+        <div class="chat-dp" id="chat-dp-box">U</div>
+        <div style="overflow:hidden;">
+          <h3 id="chat-title" style="font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Name</h3>
+          <p id="chat-subtitle" style="font-size:10.5px; opacity:0.9;">online</p>
         </div>
       </div>
       <div class="wa-icons">
-        <button id="video-call-btn" title="Direct Video Call">📹</button>
-        <button id="voice-call-btn" title="Direct Voice Call">📞</button>
+        <button id="video-call-btn" title="Video Call">??</button>
+        <button id="voice-call-btn" title="Voice Call">??</button>
       </div>
     </div>
-    <div id="upload-banner" style="display:none; background:#d32f2f; color:#fff; text-align:center; padding:5px; font-size:12px;">Sending media...</div>
+    <div id="upload-banner" style="display:none; background:#d32f2f; color:#fff; text-align:center; padding:5px; font-size:12px;">Sending...</div>
     <div class="messages" id="messages-container"></div>
+    <div class="reply-bar" id="reply-bar">
+      <span id="reply-preview-text" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Replying...</span>
+      <button id="cancel-reply-btn" style="background:none; border:none; font-weight:bold; cursor:pointer; color:#b71c1c;">?</button>
+    </div>
     <div class="chat-input">
       <input type="file" id="media-picker" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;" />
-      <button class="icon-btn" id="attach-btn" title="Attach">📎</button>
-      <button class="icon-btn" id="mic-btn" title="Voice Note">🎤</button>
+      <button class="icon-btn" id="attach-btn" title="Attach">??</button>
+      <button class="icon-btn" id="mic-btn" title="Voice Note">??</button>
       <input type="text" id="msg-input" placeholder="Message" />
-      <button class="send-btn" id="send-msg-btn">➤</button>
+      <button class="send-btn" id="send-msg-btn">?</button>
     </div>
   </div>
 
   <div id="call-overlay" class="call-overlay">
     <div style="text-align:center;">
       <h3 id="call-peer-name" style="font-size:20px;">Member</h3>
-      <p id="call-status-text" style="font-size:13px; color:#ccc; margin-top:4px;">Calling...</p>
+      <p id="call-status-text" style="font-size:13px; color:#ccc; margin-top:4px;">Ringing...</p>
     </div>
     <div class="video-stage">
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video" autoplay playsinline muted></video>
     </div>
     <div class="call-controls" id="incoming-controls" style="display:none;">
-      <button class="call-btn-circle" id="accept-call-btn" style="background:#2e7d32;">📞</button>
-      <button class="call-btn-circle" id="reject-call-btn" style="background:#c62828;">📵</button>
+      <button class="call-btn-circle" id="accept-call-btn" style="background:#2e7d32;">??</button>
+      <button class="call-btn-circle" id="reject-call-btn" style="background:#c62828;">??</button>
     </div>
     <div class="call-controls" id="active-controls">
-      <button class="call-btn-circle" id="mute-call-btn" style="background:#424242;">🎙️</button>
-      <button class="call-btn-circle" id="end-call-btn" style="background:#c62828;">📵</button>
+      <button class="call-btn-circle" id="mute-call-btn" style="background:#424242;">???</button>
+      <button class="call-btn-circle" id="end-call-btn" style="background:#c62828;">??</button>
+    </div>
+  </div>
+
+  <!-- PROFILE PHOTO (DP) & ABOUT MODAL -->
+  <div id="profile-modal" class="modal">
+    <div class="chat-header">
+      <div class="chat-header-left">
+        <button id="close-profile-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">?</button>
+        <h3 style="font-size:15px;">Profile (DP & About)</h3>
+      </div>
+    </div>
+    <div style="padding:20px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div id="profile-dp-preview" style="width:100px; height:100px; border-radius:50%; background:#b71c1c; color:#fff; display:flex; align-items:center; justify-content:center; font-size:36px; font-weight:bold; overflow:hidden; border:3px solid #b71c1c;">R</div>
+      <input type="file" id="dp-picker" accept="image/*" style="display:none;" />
+      <button class="btn-wa" id="change-dp-btn" style="background:#444; font-size:13px; padding:8px 16px;">?? Change Profile Photo (DP)</button>
+      <input type="text" id="edit-profile-name" placeholder="Your Name" />
+      <input type="text" id="edit-profile-about" placeholder="About (e.g. Available, At Work)" />
+      <button class="btn-wa" id="save-profile-submit" style="width:100%;">Save Profile ?</button>
     </div>
   </div>
 
   <div id="contact-modal" class="modal">
     <div class="chat-header">
       <div class="chat-header-left">
-        <button id="close-contact-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">←</button>
+        <button id="close-contact-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">?</button>
         <h3 style="font-size:15px;">Add / Sync Contact</h3>
       </div>
     </div>
     <div style="padding:20px; display:flex; flex-direction:column; gap:12px;">
-      <button class="btn-wa" id="pick-phonebook-btn" style="background:#2e7d32;">📱 Open Phone Contacts</button>
-      <p style="font-size:12px; color:#666; text-align:center;">— OR Enter Manually —</p>
+      <button class="btn-wa" id="pick-phonebook-btn" style="background:#2e7d32;">?? Open Phone Contacts</button>
+      <p style="font-size:12px; color:#666; text-align:center;">� OR Enter Manually �</p>
       <input type="text" id="new-contact-name" placeholder="Contact Name" />
       <input type="tel" id="new-contact-phone" placeholder="Mobile Number (e.g. 03001234567)" />
-      <button class="btn-wa" id="save-contact-submit">Save Contact ✔</button>
+      <button class="btn-wa" id="save-contact-submit">Save Contact ?</button>
     </div>
   </div>
 
   <div id="group-modal" class="modal">
     <div class="chat-header">
       <div class="chat-header-left">
-        <button id="close-group-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">←</button>
+        <button id="close-group-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">?</button>
         <h3 style="font-size:15px;">New Group</h3>
       </div>
     </div>
-    <div style="padding:12px; border-bottom:1px solid #eee;">
-      <input type="text" id="group-name-input" placeholder="Group Name" />
-    </div>
+    <div style="padding:12px; border-bottom:1px solid #eee;"><input type="text" id="group-name-input" placeholder="Group Name" /></div>
     <div id="group-members-checklist" style="flex:1; overflow-y:auto;"></div>
-    <div style="padding:12px;">
-      <button class="btn-wa" id="create-group-submit" style="width:100%;">Create Group ✔</button>
-    </div>
+    <div style="padding:12px;"><button class="btn-wa" id="create-group-submit" style="width:100%;">Create Group ?</button></div>
   </div>
 
   <div id="status-modal" class="modal">
     <div class="chat-header">
       <div class="chat-header-left">
-        <button id="close-status-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">←</button>
+        <button id="close-status-modal" style="background:none; border:none; color:#fff; font-size:20px; cursor:pointer;">?</button>
         <h3 style="font-size:15px;">Post Status</h3>
       </div>
     </div>
     <div style="padding:16px; display:flex; flex-direction:column; gap:12px; flex:1; justify-content:center;">
       <textarea id="status-text-input" rows="4" placeholder="Write status update..."></textarea>
-      <button class="btn-wa" id="post-status-submit">Share Status ➤</button>
+      <button class="btn-wa" id="post-status-submit">Share Status ?</button>
     </div>
   </div>
 
   <div id="status-viewer" class="status-viewer">
     <h4 id="viewer-author" style="position:absolute; top:16px; left:16px;">Member</h4>
-    <button id="close-viewer" style="position:absolute; top:14px; right:16px; background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">✕</button>
+    <button id="close-viewer" style="position:absolute; top:14px; right:16px; background:none; border:none; color:#fff; font-size:22px; cursor:pointer;">?</button>
     <p id="viewer-text" style="font-size:20px; line-height:1.4;"></p>
   </div>
 </div>
-<script src="./app.js?v=12"></script>
+<script src="./app.js?v=20"></script>
 </body>
 </html>
