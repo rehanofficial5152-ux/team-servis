@@ -4,7 +4,7 @@ const BASE_URL = "https://" + host + "/v1/projects/team-servis/databases/(defaul
 let me = JSON.parse(localStorage.getItem("ts_user") || "null");
 let savedContacts = JSON.parse(localStorage.getItem("ts_contacts") || "{}");
 let matchedContacts = [], loadedGroupsCache = [], onlineMap = {}, activeChatId = null, activePeerPhone = "", activeChatTitle = "", isGroupChat = false, chatTimer = null, lastMsgHash = "";
-let pc = null, localStream = null, activeCallDocId = null, callPollTimer = null, mediaRecorder = null, audioChunks = [];
+let pc = null, localStream = null, activeCallDocId = null, callPollTimer = null, ringInterval = null, mediaRecorder = null, audioChunks = [], lastNotifiedMsgId = "";
 
 function normPhone(p) {
   let s = (p || "").replace(/\D/g, "");
@@ -12,8 +12,34 @@ function normPhone(p) {
   return s;
 }
 function fmtTime(ts) {
-  const d = new Date(Number(ts));
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return new Date(Number(ts)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function playTone(freq, dur) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = freq; osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); setTimeout(function() { osc.stop(); ctx.close(); }, dur);
+  } catch (e) {}
+}
+function startRinging() {
+  stopRinging();
+  playTone(520, 400);
+  if (navigator.vibrate) navigator.vibrate();
+  ringInterval = setInterval(function() {
+    playTone(520, 400);
+    if (navigator.vibrate) navigator.vibrate();
+  }, 1800);
+}
+function stopRinging() {
+  if (ringInterval) { clearInterval(ringInterval); ringInterval = null; }
+  if (navigator.vibrate) navigator.vibrate(0);
+}
+function notifyUser(title, body) {
+  playTone(880, 180);
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, { body: body });
+  }
 }
 async function getRoomCryptoKey(roomId) {
   const enc = new TextEncoder();
@@ -62,6 +88,7 @@ document.getElementById("login-btn").onclick = async function() {
   const status = document.getElementById("status-msg");
   if (!name || phone.length < 10) { status.innerText = "Naam aur sahi mobile number likhein!"; return; }
   if (code !== SECRET_CODE) { status.innerText = "Ghalat Team Secret Code!"; return; }
+  if ("Notification" in window && Notification.permission !== "granted") { Notification.requestPermission(); }
   const btn = document.getElementById("login-btn"); btn.disabled = true; btn.innerText = "Securing...";
   try {
     const res = await fetch(BASE_URL + "/users/" + encodeURIComponent(phone), {
@@ -80,15 +107,13 @@ function sendHeartbeat() {
   }).catch(function() {});
 }
 function startApp() {
-  showScreen("home-screen");
-  loadChatsAndGroups();
-  sendHeartbeat();
-  setInterval(sendHeartbeat, 15000);
-  setInterval(checkIncomingCalls, 3000);
+  if ("Notification" in window && Notification.permission !== "granted") { Notification.requestPermission(); }
+  showScreen("home-screen"); loadChatsAndGroups(); sendHeartbeat();
+  setInterval(sendHeartbeat, 15000); setInterval(checkIncomingCalls, 3000);
 }
 document.getElementById("refresh-btn").onclick = function() { loadChatsAndGroups(); loadStatuses(); loadCalls(); };
 document.getElementById("logout-btn").onclick = function() { localStorage.removeItem("ts_user"); me = null; if (chatTimer) clearInterval(chatTimer); showScreen("login-screen"); };
-async function openContactModal() {
+async function triggerPhonebook() {
   if ("contacts" in navigator && "ContactsManager" in window) {
     try {
       const picked = await navigator.contacts.select(["name", "tel"], { multiple: true });
@@ -99,13 +124,18 @@ async function openContactModal() {
             item.tel.forEach(function(rawTel) { const p = normPhone(rawTel); if (p.length >= 10 && p !== me.phone) savedContacts[p] = cName; });
           }
         });
-        localStorage.setItem("ts_contacts", JSON.stringify(savedContacts)); loadChatsAndGroups(); return;
+        localStorage.setItem("ts_contacts", JSON.stringify(savedContacts));
+        document.getElementById("contact-modal").classList.remove("active"); loadChatsAndGroups(); return true;
       }
     } catch (e) {}
   }
-  document.getElementById("new-contact-name").value = ""; document.getElementById("new-contact-phone").value = "";
-  document.getElementById("contact-modal").classList.add("active");
+  return false;
 }
+async function openContactModal() {
+  const ok = await triggerPhonebook();
+  if (!ok) { document.getElementById("new-contact-name").value = ""; document.getElementById("new-contact-phone").value = ""; document.getElementById("contact-modal").classList.add("active"); }
+}
+document.getElementById("pick-phonebook-btn").onclick = async function() { const ok = await triggerPhonebook(); if (!ok) alert("Neeche manual number likh kar Save karein."); };
 document.getElementById("add-contact-btn").onclick = openContactModal;
 document.getElementById("fab-contact-btn").onclick = openContactModal;
 document.getElementById("close-contact-modal").onclick = function() { document.getElementById("contact-modal").classList.remove("active"); };
@@ -117,7 +147,6 @@ document.getElementById("save-contact-submit").onclick = function() {
 };
 document.getElementById("search-contact-input").oninput = function() { renderChatList(this.value.trim().toLowerCase()); };
 async function loadChatsAndGroups() {
-  const container = document.getElementById("chats-list");
   try {
     const [uR, gR] = await Promise.all([fetch(BASE_URL + "/users"), fetch(BASE_URL + "/groups")]);
     const uD = await uR.json(), gD = await gR.json();
@@ -147,8 +176,7 @@ function renderChatList(flt) {
   });
   matchedContacts.forEach(function(ct) {
     if (flt && ct.name.toLowerCase().indexOf(flt) === -1 && ct.phone.indexOf(flt) === -1) return;
-    const st = onlineMap[ct.phone] || ct.phone;
-    const item = createListRow(ct.name, st, false, false);
+    const item = createListRow(ct.name, onlineMap[ct.phone] || ct.phone, false, false);
     item.onclick = function() { openChat([me.phone, ct.phone].sort().join("_"), ct.name, false, ct.phone); }; c.appendChild(item);
   });
   if (c.children.length === 0) { c.innerText = "Neeche + dabakar team member ka number save karein!"; c.style.padding = "25px"; c.style.textAlign = "center"; }
@@ -166,7 +194,7 @@ function openGroupModal() {
   matchedContacts.forEach(function(u) {
     const row = document.createElement("label"); row.className = "list-item"; row.style.justifyContent = "space-between";
     const span = document.createElement("span"); span.innerText = u.name + " (" + u.phone + ")";
-    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = u.phone; cb.style.width = "20px"; cb.style.height = "20px";
+    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = u.phone; cb.style.width = "18px"; cb.style.height = "18px";
     row.appendChild(span); row.appendChild(cb); list.appendChild(row);
   });
   document.getElementById("group-modal").classList.add("active");
@@ -186,18 +214,23 @@ function openChat(cId, title, isG, peerPhone) {
   document.getElementById("chat-subtitle").innerText = isG ? "Encrypted Group" : (onlineMap[peerPhone] || "End-to-End Encrypted");
   showScreen("chat-screen"); fetchMessages(); if (chatTimer) clearInterval(chatTimer); chatTimer = setInterval(fetchMessages, 2500);
 }
-document.getElementById("back-btn").onclick = function() { if (chatTimer) clearInterval(chatTimer); showScreen("home-screen"); loadChatsAndGroups(); };
+document.getElementById("back-btn").onclick = function() { activeChatId = null; if (chatTimer) clearInterval(chatTimer); showScreen("home-screen"); loadChatsAndGroups(); };
 async function fetchMessages() {
   if (!activeChatId) return;
   try {
     const res = await fetch(BASE_URL + "/chats/" + encodeURIComponent(activeChatId) + "/messages?pageSize=100");
     const data = await res.json();
     const docs = (data.documents || []).sort(function(a, b) { return Number(a.fields.time.integerValue) - Number(b.fields.time.integerValue); });
-    const h = docs.map(function(d) { return d.name; }).join(",");
+    const h = docs.map(function(d) { return d.name + ":" + (d.fields.read ? d.fields.read.booleanValue : false); }).join(",");
     if (h === lastMsgHash) return; lastMsgHash = h;
     const box = document.getElementById("messages-container"); box.innerHTML = "";
     for (let i = 0; i < docs.length; i++) {
       const docObj = docs[i], f = docObj.fields, sP = normPhone(f.sender.stringValue), isMe = sP === me.phone;
+      const isRead = f.read && f.read.booleanValue === true;
+      if (!isMe && !isRead) {
+        fetch("https://" + host + "/v1/" + docObj.name + "?updateMask.fieldPaths=read", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields: { read: { booleanValue: true } } }) }).catch(function() {});
+        if (lastNotifiedMsgId !== docObj.name) { lastNotifiedMsgId = docObj.name; notifyUser(activeChatTitle, "New message received"); }
+      }
       const div = document.createElement("div"); div.className = "msg " + (isMe ? "me" : "them");
       if (isGroupChat && !isMe) { const st = document.createElement("div"); st.className = "msg-sender"; st.innerText = savedContacts[sP] || sP; div.appendChild(st); }
       const mT = f.mediaType ? f.mediaType.stringValue : "text", mU = f.mediaUrl && f.mediaUrl.stringValue ? await decryptText(f.mediaUrl.stringValue, activeChatId) : "";
@@ -206,8 +239,12 @@ async function fetchMessages() {
       else if (mT === "audio" && mU) { const aud = document.createElement("audio"); aud.src = mU; aud.controls = true; div.appendChild(aud); }
       else if (mT === "doc" && mU) { const a = document.createElement("a"); a.href = mU; a.target = "_blank"; a.innerText = "?? Open Document"; a.style.color = "#b71c1c"; div.appendChild(a); }
       if (f.text && f.text.stringValue) { const txt = document.createElement("div"); txt.innerText = await decryptText(f.text.stringValue, activeChatId); div.appendChild(txt); }
-      const meta = document.createElement("div"); meta.className = "msg-meta"; meta.innerText = fmtTime(f.time.integerValue) + (isMe ? " ??" : "");
-      if (isMe) { meta.style.cursor = "pointer"; meta.title = "Click to delete"; meta.onclick = async function() { if (confirm("Delete this message?")) { await fetch("https://" + host + "/v1/" + docObj.name, { method: "DELETE" }); lastMsgHash = ""; fetchMessages(); } }; }
+      const meta = document.createElement("div"); meta.className = "msg-meta";
+      const tSpan = document.createElement("span"); tSpan.innerText = fmtTime(f.time.integerValue); meta.appendChild(tSpan);
+      if (isMe) {
+        const tk = document.createElement("span"); tk.className = "ticks" + (isRead ? " read" : ""); tk.innerText = "??"; meta.appendChild(tk);
+        meta.style.cursor = "pointer"; meta.onclick = async function() { if (confirm("Delete message?")) { await fetch("https://" + host + "/v1/" + docObj.name, { method: "DELETE" }); lastMsgHash = ""; fetchMessages(); } };
+      }
       div.appendChild(meta); box.appendChild(div);
     }
     box.scrollTop = box.scrollHeight;
@@ -216,7 +253,7 @@ async function fetchMessages() {
 async function postChatPayload(pT, mT, pU) {
   await fetch(BASE_URL + "/chats/" + encodeURIComponent(activeChatId) + "/messages", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fields: { sender: { stringValue: me.phone }, senderName: { stringValue: me.name }, text: { stringValue: pT ? await encryptText(pT, activeChatId) : "" }, mediaType: { stringValue: mT || "text" }, mediaUrl: { stringValue: pU ? await encryptText(pU, activeChatId) : "" }, time: { integerValue: String(Date.now()) } } })
+    body: JSON.stringify({ fields: { sender: { stringValue: me.phone }, senderName: { stringValue: me.name }, text: { stringValue: pT ? await encryptText(pT, activeChatId) : "" }, mediaType: { stringValue: mT || "text" }, mediaUrl: { stringValue: pU ? await encryptText(pU, activeChatId) : "" }, read: { booleanValue: false }, time: { integerValue: String(Date.now()) } } })
   });
   lastMsgHash = ""; fetchMessages();
 }
@@ -240,7 +277,7 @@ document.getElementById("mic-btn").onclick = async function() {
 };
 document.getElementById("attach-btn").onclick = function() { document.getElementById("media-picker").click(); };
 document.getElementById("media-picker").onchange = async function(e) {
-  const file = e.target.files[0]; e.target.value = ""; if (!file || !activeChatId) return;
+  const file = e.target.files; e.target.value = ""; if (!file || !activeChatId) return;
   const b = document.getElementById("upload-banner"); b.style.display = "block";
   try {
     if (file.type.indexOf("image/") === 0) {
@@ -255,9 +292,9 @@ document.getElementById("media-picker").onchange = async function(e) {
 };
 async function startDirectCall(isVideo) {
   if (!activePeerPhone && !isGroupChat) return;
-  if (isGroupChat) return alert("Direct WebRTC call 1-on-1 chat ke liye hai!");
+  if (isGroupChat) return alert("Direct call 1-on-1 chat ke liye hai!");
   document.getElementById("call-peer-name").innerText = activeChatTitle;
-  document.getElementById("call-status-text").innerText = "Calling...";
+  document.getElementById("call-status-text").innerText = "Ringing...";
   document.getElementById("incoming-controls").style.display = "none";
   document.getElementById("active-controls").style.display = "flex";
   document.getElementById("call-overlay").classList.add("active");
@@ -266,7 +303,7 @@ async function startDirectCall(isVideo) {
     document.getElementById("local-video").srcObject = localStream;
     pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:://google.com" }] });
     localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
-    pc.ontrack = function(ev) { document.getElementById("remote-video").srcObject = ev.streams[0]; document.getElementById("call-status-text").innerText = "Connected"; };
+    pc.ontrack = function(ev) { document.getElementById("remote-video").srcObject = ev.streams; document.getElementById("call-status-text").innerText = "Connected"; };
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
     await new Promise(function(r) { setTimeout(r, 1200); });
     const res = await fetch(BASE_URL + "/calls", {
@@ -295,21 +332,26 @@ async function checkIncomingCalls() {
     const docs = data.documents || [];
     for (let i = 0; i < docs.length; i++) {
       const f = docs[i].fields;
-      if (f && f.receiverPhone && normPhone(f.receiverPhone.stringValue) === me.phone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 30000) {
+      if (f && f.receiverPhone && normPhone(f.receiverPhone.stringValue) === me.phone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 35000) {
         activeCallDocId = docs[i].name;
         const cPhone = normPhone(f.callerPhone.stringValue);
-        document.getElementById("call-peer-name").innerText = savedContacts[cPhone] || f.caller.stringValue;
+        const callerTitle = savedContacts[cPhone] || f.caller.stringValue;
+        document.getElementById("call-peer-name").innerText = callerTitle;
         document.getElementById("call-status-text").innerText = "Incoming " + f.type.stringValue + "...";
         document.getElementById("incoming-controls").style.display = "flex";
         document.getElementById("active-controls").style.display = "none";
         document.getElementById("call-overlay").classList.add("active");
+        startRinging();
+        notifyUser("Incoming " + f.type.stringValue, callerTitle + " is calling you...");
+
         document.getElementById("accept-call-btn").onclick = async function() {
+          stopRinging();
           const isVid = f.type.stringValue === "Video Call";
           localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVid });
           document.getElementById("local-video").srcObject = localStream;
           pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:://google.com" }] });
           localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
-          pc.ontrack = function(ev) { document.getElementById("remote-video").srcObject = ev.streams[0]; };
+          pc.ontrack = function(ev) { document.getElementById("remote-video").srcObject = ev.streams; };
           await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(f.offer.stringValue)));
           const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
           await new Promise(function(r) { setTimeout(r, 1200); });
@@ -329,6 +371,7 @@ async function checkIncomingCalls() {
 }
 
 async function endDirectCall() {
+  stopRinging();
   if (activeCallDocId) {
     fetch("https://" + host + "/v1/" + activeCallDocId + "?updateMask.fieldPaths=status", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -338,6 +381,7 @@ async function endDirectCall() {
   closeCallUI();
 }
 function closeCallUI() {
+  stopRinging();
   if (callPollTimer) clearInterval(callPollTimer);
   if (localStream) localStream.getTracks().forEach(function(t) { t.stop(); });
   if (pc) pc.close();
@@ -347,7 +391,7 @@ function closeCallUI() {
 document.getElementById("end-call-btn").onclick = endDirectCall;
 document.getElementById("mute-call-btn").onclick = function() {
   if (!localStream) return;
-  const tr = localStream.getAudioTracks()[0];
+  const tr = localStream.getAudioTracks();
   if (tr) { tr.enabled = !tr.enabled; this.innerText = tr.enabled ? "???" : "??"; }
 };
 document.getElementById("voice-call-btn").onclick = function() { startDirectCall(false); };
