@@ -12,7 +12,6 @@ let pc = null, localStream = null, activeCallDocId = null, incomingCallData = nu
 let mediaRecorder = null, audioChunks = [], lastNotifiedMsgId = "", tempDpData = "", tempStatusImg = "";
 let selectedMsgObj = null, forwardPayload = null, deferredInstallPrompt = null, currentTabIdx = 0;
 
-// Safe Notification Permission Request (Never blocks WebView / APK)
 function askNotifPermissionSafe() {
   try {
     if ("Notification" in window && Notification.permission === "default") {
@@ -21,7 +20,6 @@ function askNotifPermissionSafe() {
   } catch (e) {}
 }
 
-// IndexedDB helper for Background Service Worker
 function saveSwStateToDB(phone, contacts) {
   try {
     const req = indexedDB.open("TeamServisDB", 1);
@@ -164,7 +162,8 @@ function goBackHome() {
   loadChatsAndGroups();
 }
 
-// SWIPEABLE TABS (CHATS / STATUS / CALLS)
+// FIXED TAB SWITCHING (CHATS / STATUS / CALLS)
+const tabIds = ["chats-view", "status-view", "calls-view"];
 function switchHomeTab(idx) {
   if (idx < 0) idx = 0;
   if (idx > 2) idx = 2;
@@ -172,7 +171,10 @@ function switchHomeTab(idx) {
   document.querySelectorAll(".wa-tab").forEach(function(t, i) {
     t.classList.toggle("active", i === idx);
   });
-  document.getElementById("tabs-slider-track").style.transform = "translateX(-" + (idx * 33.3333) + "%)";
+  tabIds.forEach(function(id, i) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", i === idx);
+  });
   if (idx === 1) loadStatuses();
   if (idx === 2) loadCalls();
 }
@@ -206,7 +208,6 @@ function renderMyMiniDp() {
   else if (me) { box.innerText = me.name.charAt(0).toUpperCase(); }
 }
 
-// LOGIN BUTTON (Fixed & Non-Blocking)
 document.getElementById("login-btn").onclick = async function() {
   const name = document.getElementById("user-name").value.trim();
   const phone = normPhone(document.getElementById("phone-number").value);
@@ -215,19 +216,12 @@ document.getElementById("login-btn").onclick = async function() {
   const status = document.getElementById("status-msg");
   status.innerText = "";
 
-  if (!name || phone.length < 10) {
-    status.innerText = "Naam aur sahi mobile number likhein!";
-    return;
-  }
-  if (code !== SECRET_CODE) {
-    status.innerText = "Ghalat Team Secret Code!";
-    return;
-  }
+  if (!name || phone.length < 10) { status.innerText = "Naam aur sahi mobile number likhein!"; return; }
+  if (code !== SECRET_CODE) { status.innerText = "Ghalat Team Secret Code!"; return; }
 
   askNotifPermissionSafe();
   const btn = document.getElementById("login-btn");
-  btn.disabled = true;
-  btn.innerText = "Securing...";
+  btn.disabled = true; btn.innerText = "Securing...";
 
   try {
     const res = await fetch(BASE_URL + "/users/" + encodeURIComponent(phone), {
@@ -246,13 +240,11 @@ document.getElementById("login-btn").onclick = async function() {
     if (!res.ok) throw new Error("Server Error: " + res.status);
     me = { name: name, phone: phone, about: about, dp: "" };
     localStorage.setItem("ts_user", JSON.stringify(me));
-    btn.disabled = false;
-    btn.innerText = "Agree & Continue";
+    btn.disabled = false; btn.innerText = "Agree & Continue";
     startApp();
   } catch (e) {
     status.innerText = "Internet / Server Error: " + e.message;
-    btn.disabled = false;
-    btn.innerText = "Agree & Continue";
+    btn.disabled = false; btn.innerText = "Agree & Continue";
   }
 };
 
@@ -325,7 +317,6 @@ function startApp() {
 document.getElementById("refresh-btn").onclick = function() { loadChatsAndGroups(); loadStatuses(); loadCalls(); };
 document.getElementById("logout-btn").onclick = function() { localStorage.removeItem("ts_user"); me = null; if (chatTimer) clearInterval(chatTimer); showScreen("login-screen"); };
 
-// CONTACTS SYNC & VCF IMPORT
 async function triggerPhonebook() {
   if ("contacts" in navigator && "ContactsManager" in window) {
     try {
@@ -606,7 +597,6 @@ document.getElementById("msg-input").addEventListener("input", function() {
   }
 });
 
-// Message Action Sheet
 document.getElementById("act-cancel").onclick = function() { document.getElementById("msg-action-sheet").classList.remove("active"); };
 document.getElementById("act-reply").onclick = function() {
   document.getElementById("msg-action-sheet").classList.remove("active");
@@ -765,7 +755,6 @@ document.getElementById("media-picker").onchange = async function(e) {
   } catch (err) {} b.style.display = "none";
 };
 
-// REBUILT WEBRTC CALLS
 const ICE_CONFIG = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -931,7 +920,6 @@ document.getElementById("mute-call-btn").onclick = function() {
 document.getElementById("voice-call-btn").onclick = function() { startDirectCall(false); };
 document.getElementById("video-call-btn").onclick = function() { startDirectCall(true); };
 
-// STATUS
 document.getElementById("add-status-item").onclick = function() {
   tempStatusImg = "";
   document.getElementById("status-img-preview").style.display = "none";
@@ -993,7 +981,7 @@ async function loadCalls() {
   const list = document.getElementById("calls-list"); list.innerHTML = "";
   try {
     const res = await fetch(BASE_URL + "/calls?pageSize=50"); const data = await res.json();
-    (data.documents || []).sort(function(a, b) { return Number(b.fields.time.integerValue) - Number(a.fields.time.integerValue); }).forEach(function(d) {
+    (data.documents || []).sort(function(a, b) { return Number(b.fields.time.integerValue) - Number(b.fields.time.integerValue); }).forEach(function(d) {
       const f = d.fields, cP = f.callerPhone ? normPhone(f.callerPhone.stringValue) : "", rP = f.receiverPhone ? normPhone(f.receiverPhone.stringValue) : "";
       if (cP !== me.phone && rP !== me.phone) return;
       const isOut = cP === me.phone;

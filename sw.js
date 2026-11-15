@@ -95,7 +95,7 @@ async function pollBackground() {
   } catch (e) {}
 }
 
-setInterval(pollBackground, 4500);
+setInterval(pollBackground, 4000);
 
 self.addEventListener("notificationclick", function(event) {
   event.notification.close();
