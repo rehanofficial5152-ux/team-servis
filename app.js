@@ -12,13 +12,16 @@ let pc = null, localStream = null, activeCallDocId = null, incomingCallData = nu
 let mediaRecorder = null, audioChunks = [], lastNotifiedMsgId = "", tempDpData = "", tempStatusImg = "";
 let selectedMsgObj = null, forwardPayload = null, deferredInstallPrompt = null, currentTabIdx = 0;
 
-// Prevent Android/Chrome Pull-to-Refresh when scrolling chat
-document.addEventListener("touchmove", function(e) {
-  if (e.target.closest(".messages") || e.target.closest(".tab-view") || e.target.closest(".modal")) return;
-  e.preventDefault();
-}, { passive: false });
+// Safe Notification Permission Request (Never blocks WebView / APK)
+function askNotifPermissionSafe() {
+  try {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(function() {});
+    }
+  } catch (e) {}
+}
 
-// IndexedDB helper to share user session with Service Worker even when app is closed
+// IndexedDB helper for Background Service Worker
 function saveSwStateToDB(phone, contacts) {
   try {
     const req = indexedDB.open("TeamServisDB", 1);
@@ -46,13 +49,16 @@ window.addEventListener("beforeinstallprompt", function(e) {
   const b = document.getElementById("install-banner");
   if (b) b.style.display = "flex";
 });
-document.getElementById("install-app-btn").onclick = async function() {
-  if (!deferredInstallPrompt) return;
-  deferredInstallPrompt.prompt();
-  await deferredInstallPrompt.userChoice;
-  deferredInstallPrompt = null;
-  document.getElementById("install-banner").style.display = "none";
-};
+const instBtn = document.getElementById("install-app-btn");
+if (instBtn) {
+  instBtn.onclick = async function() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    document.getElementById("install-banner").style.display = "none";
+  };
+}
 
 function normPhone(p) {
   let s = (p || "").replace(/\D/g, "");
@@ -84,15 +90,17 @@ function stopRinging() {
 function notifyUser(title, body, chatId) {
   if (chatId && mutedChats[chatId]) return;
   playTone(880, 180);
-  if ("Notification" in window && Notification.permission === "granted") {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.ready.then(function(reg) {
-        reg.showNotification(title, { body: body, vibrate: [300, 150, 300], tag: chatId || "ts_alert" });
-      });
-    } else {
-      new Notification(title, { body: body });
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then(function(reg) {
+          reg.showNotification(title, { body: body, vibrate: [300, 150, 300], tag: chatId || "ts_alert" });
+        }).catch(function() { new Notification(title, { body: body }); });
+      } else {
+        new Notification(title, { body: body });
+      }
     }
-  }
+  } catch (e) {}
 }
 
 async function getRoomCryptoKey(roomId) {
@@ -175,21 +183,22 @@ document.querySelectorAll(".wa-tab").forEach(function(tab) {
   };
 });
 
-// Touch Swipe Listener on Home Tabs
 let touchStartX = 0, touchStartY = 0;
 const swipeArea = document.getElementById("tabs-swipe-area");
-swipeArea.addEventListener("touchstart", function(e) {
-  touchStartX = e.changedTouches[0].screenX;
-  touchStartY = e.changedTouches[0].screenY;
-}, { passive: true });
-swipeArea.addEventListener("touchend", function(e) {
-  const dx = e.changedTouches[0].screenX - touchStartX;
-  const dy = e.changedTouches[0].screenY - touchStartY;
-  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
-    if (dx < 0 && currentTabIdx < 2) switchHomeTab(currentTabIdx + 1);
-    else if (dx > 0 && currentTabIdx > 0) switchHomeTab(currentTabIdx - 1);
-  }
-}, { passive: true });
+if (swipeArea) {
+  swipeArea.addEventListener("touchstart", function(e) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+  }, { passive: true });
+  swipeArea.addEventListener("touchend", function(e) {
+    const dx = e.changedTouches[0].screenX - touchStartX;
+    const dy = e.changedTouches[0].screenY - touchStartY;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      if (dx < 0 && currentTabIdx < 2) switchHomeTab(currentTabIdx + 1);
+      else if (dx > 0 && currentTabIdx > 0) switchHomeTab(currentTabIdx - 1);
+    }
+  }, { passive: true });
+}
 
 function renderMyMiniDp() {
   const box = document.getElementById("open-profile-btn");
@@ -197,26 +206,54 @@ function renderMyMiniDp() {
   else if (me) { box.innerText = me.name.charAt(0).toUpperCase(); }
 }
 
+// LOGIN BUTTON (Fixed & Non-Blocking)
 document.getElementById("login-btn").onclick = async function() {
   const name = document.getElementById("user-name").value.trim();
   const phone = normPhone(document.getElementById("phone-number").value);
   const about = document.getElementById("user-about").value.trim() || "Available";
   const code = document.getElementById("team-code").value.trim().toUpperCase();
   const status = document.getElementById("status-msg");
-  if (!name || phone.length < 10) { status.innerText = "Naam aur sahi mobile number likhein!"; return; }
-  if (code !== SECRET_CODE) { status.innerText = "Ghalat Team Secret Code!"; return; }
-  if ("Notification" in window && Notification.permission !== "granted") { await Notification.requestPermission(); }
-  const btn = document.getElementById("login-btn"); btn.disabled = true; btn.innerText = "Securing...";
+  status.innerText = "";
+
+  if (!name || phone.length < 10) {
+    status.innerText = "Naam aur sahi mobile number likhein!";
+    return;
+  }
+  if (code !== SECRET_CODE) {
+    status.innerText = "Ghalat Team Secret Code!";
+    return;
+  }
+
+  askNotifPermissionSafe();
+  const btn = document.getElementById("login-btn");
+  btn.disabled = true;
+  btn.innerText = "Securing...";
+
   try {
     const res = await fetch(BASE_URL + "/users/" + encodeURIComponent(phone), {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fields: { name: { stringValue: name }, phone: { stringValue: phone }, about: { stringValue: about }, lastSeen: { integerValue: String(Date.now()) }, typingTo: { stringValue: "" } } })
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fields: {
+          name: { stringValue: name },
+          phone: { stringValue: phone },
+          about: { stringValue: about },
+          lastSeen: { integerValue: String(Date.now()) },
+          typingTo: { stringValue: "" }
+        }
+      })
     });
     if (!res.ok) throw new Error("Server Error: " + res.status);
     me = { name: name, phone: phone, about: about, dp: "" };
     localStorage.setItem("ts_user", JSON.stringify(me));
+    btn.disabled = false;
+    btn.innerText = "Agree & Continue";
     startApp();
-  } catch (e) { status.innerText = "Error: " + e.message; btn.disabled = false; btn.innerText = "Agree & Continue"; }
+  } catch (e) {
+    status.innerText = "Internet / Server Error: " + e.message;
+    btn.disabled = false;
+    btn.innerText = "Agree & Continue";
+  }
 };
 
 document.getElementById("open-profile-btn").onclick = function() {
@@ -277,7 +314,7 @@ function syncSwUser() {
 }
 
 function startApp() {
-  if ("Notification" in window && Notification.permission !== "granted") { Notification.requestPermission(); }
+  askNotifPermissionSafe();
   syncSwUser();
   renderMyMiniDp(); showScreen("home-screen"); pushNavState("home"); loadChatsAndGroups(); sendHeartbeat("");
   setInterval(function() { sendHeartbeat(); }, 12000);
@@ -728,7 +765,7 @@ document.getElementById("media-picker").onchange = async function(e) {
   } catch (err) {} b.style.display = "none";
 };
 
-// REBUILT WEBRTC CALLS (OUTGOING + INCOMING + PROPER PICKUP)
+// REBUILT WEBRTC CALLS
 const ICE_CONFIG = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -828,7 +865,6 @@ async function checkIncomingCalls() {
   } catch (e) {}
 }
 
-// Direct static click handlers for Call Accept / Reject
 document.getElementById("accept-call-btn").onclick = async function() {
   if (!activeCallDocId || !incomingCallData) return;
   stopRinging();
