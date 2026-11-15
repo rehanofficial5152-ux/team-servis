@@ -8,16 +8,38 @@ let chatPreviews = JSON.parse(localStorage.getItem("ts_previews") || "{}");
 let matchedContacts = [], loadedGroupsCache = [], userProfiles = {};
 let activeChatId = null, activePeerPhone = "", activeChatTitle = "", activeGroupMembers = "", isGroupChat = false;
 let chatTimer = null, typingTimer = null, lastMsgHash = "", replyToText = "", chatSearchFilter = "";
-let pc = null, localStream = null, activeCallDocId = null, callPollTimer = null, ringInterval = null;
+let pc = null, localStream = null, activeCallDocId = null, incomingCallData = null, callPollTimer = null, ringInterval = null;
 let mediaRecorder = null, audioChunks = [], lastNotifiedMsgId = "", tempDpData = "", tempStatusImg = "";
-let selectedMsgObj = null, forwardPayload = null, deferredInstallPrompt = null;
+let selectedMsgObj = null, forwardPayload = null, deferredInstallPrompt = null, currentTabIdx = 0;
 
-// Service Worker & PWA Setup for Background Notifications
+// Prevent Android/Chrome Pull-to-Refresh when scrolling chat
+document.addEventListener("touchmove", function(e) {
+  if (e.target.closest(".messages") || e.target.closest(".tab-view") || e.target.closest(".modal")) return;
+  e.preventDefault();
+}, { passive: false });
+
+// IndexedDB helper to share user session with Service Worker even when app is closed
+function saveSwStateToDB(phone, contacts) {
+  try {
+    const req = indexedDB.open("TeamServisDB", 1);
+    req.onupgradeneeded = function(ev) { ev.target.result.createObjectStore("state"); };
+    req.onsuccess = function(ev) {
+      const db = ev.target.result;
+      const tx = db.transaction("state", "readwrite");
+      tx.objectStore("state").put({ phone: phone, contacts: contacts }, "user_info");
+    };
+  } catch (e) {}
+}
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").then(function(reg) {
-    if (me && reg.active) reg.active.postMessage({ type: "SET_USER", phone: me.phone, contacts: savedContacts });
+    if (me) {
+      saveSwStateToDB(me.phone, savedContacts);
+      if (reg.active) reg.active.postMessage({ type: "SET_USER", phone: me.phone, contacts: savedContacts });
+    }
   }).catch(function() {});
 }
+
 window.addEventListener("beforeinstallprompt", function(e) {
   e.preventDefault();
   deferredInstallPrompt = e;
@@ -63,9 +85,9 @@ function notifyUser(title, body, chatId) {
   if (chatId && mutedChats[chatId]) return;
   playTone(880, 180);
   if ("Notification" in window && Notification.permission === "granted") {
-    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+    if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then(function(reg) {
-        reg.showNotification(title, { body: body, vibrate: [200, 100, 200], tag: chatId || "ts_alert" });
+        reg.showNotification(title, { body: body, vibrate: [300, 150, 300], tag: chatId || "ts_alert" });
       });
     } else {
       new Notification(title, { body: body });
@@ -134,17 +156,40 @@ function goBackHome() {
   loadChatsAndGroups();
 }
 
+// SWIPEABLE TABS (CHATS / STATUS / CALLS)
+function switchHomeTab(idx) {
+  if (idx < 0) idx = 0;
+  if (idx > 2) idx = 2;
+  currentTabIdx = idx;
+  document.querySelectorAll(".wa-tab").forEach(function(t, i) {
+    t.classList.toggle("active", i === idx);
+  });
+  document.getElementById("tabs-slider-track").style.transform = "translateX(-" + (idx * 33.3333) + "%)";
+  if (idx === 1) loadStatuses();
+  if (idx === 2) loadCalls();
+}
+
 document.querySelectorAll(".wa-tab").forEach(function(tab) {
   tab.onclick = function() {
-    document.querySelectorAll(".wa-tab").forEach(function(t) { t.classList.remove("active"); });
-    document.querySelectorAll(".tab-view").forEach(function(v) { v.classList.remove("active"); });
-    tab.classList.add("active");
-    const v = tab.getAttribute("data-tab");
-    document.getElementById(v).classList.add("active");
-    if (v === "status-view") loadStatuses();
-    if (v === "calls-view") loadCalls();
+    switchHomeTab(Number(tab.getAttribute("data-index")));
   };
 });
+
+// Touch Swipe Listener on Home Tabs
+let touchStartX = 0, touchStartY = 0;
+const swipeArea = document.getElementById("tabs-swipe-area");
+swipeArea.addEventListener("touchstart", function(e) {
+  touchStartX = e.changedTouches[0].screenX;
+  touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+swipeArea.addEventListener("touchend", function(e) {
+  const dx = e.changedTouches[0].screenX - touchStartX;
+  const dy = e.changedTouches[0].screenY - touchStartY;
+  if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+    if (dx < 0 && currentTabIdx < 2) switchHomeTab(currentTabIdx + 1);
+    else if (dx > 0 && currentTabIdx > 0) switchHomeTab(currentTabIdx - 1);
+  }
+}, { passive: true });
 
 function renderMyMiniDp() {
   const box = document.getElementById("open-profile-btn");
@@ -224,7 +269,9 @@ function sendHeartbeat(typingTarget) {
 }
 
 function syncSwUser() {
-  if ("serviceWorker" in navigator && navigator.serviceWorker.controller && me) {
+  if (!me) return;
+  saveSwStateToDB(me.phone, savedContacts);
+  if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.controller.postMessage({ type: "SET_USER", phone: me.phone, contacts: savedContacts });
   }
 }
@@ -234,8 +281,8 @@ function startApp() {
   syncSwUser();
   renderMyMiniDp(); showScreen("home-screen"); pushNavState("home"); loadChatsAndGroups(); sendHeartbeat("");
   setInterval(function() { sendHeartbeat(); }, 12000);
-  setInterval(checkIncomingCalls, 2500);
-  setInterval(backgroundRoomPoll, 5000);
+  setInterval(checkIncomingCalls, 2000);
+  setInterval(backgroundRoomPoll, 4500);
 }
 
 document.getElementById("refresh-btn").onclick = function() { loadChatsAndGroups(); loadStatuses(); loadCalls(); };
@@ -446,9 +493,9 @@ function openChat(cId, title, isG, peerPhone, gMembers) {
   const dpBox = document.getElementById("chat-dp-box"); dpBox.innerHTML = "";
   if (!isG && prof.dp) { const im = document.createElement("img"); im.src = prof.dp; dpBox.appendChild(im); }
   else { dpBox.innerText = isG ? "G" : title.charAt(0).toUpperCase(); }
-  showScreen("chat-screen"); pushNavState("chat"); fetchMessages();
+  showScreen("chat-screen"); pushNavState("chat"); fetchMessages(true);
   if (chatTimer) clearInterval(chatTimer);
-  chatTimer = setInterval(function() { fetchMessages(); loadChatsAndGroups(); }, 2200);
+  chatTimer = setInterval(function() { fetchMessages(false); loadChatsAndGroups(); }, 2500);
 }
 
 document.getElementById("back-btn").onclick = goBackHome;
@@ -481,8 +528,8 @@ document.getElementById("menu-search-chat").onclick = function() {
   document.getElementById("chat-search-input").value = "";
   document.getElementById("chat-search-input").focus();
 };
-document.getElementById("chat-search-input").oninput = function() { chatSearchFilter = this.value.trim().toLowerCase(); lastMsgHash = ""; fetchMessages(); };
-document.getElementById("close-chat-search").onclick = function() { chatSearchFilter = ""; document.getElementById("chat-search-bar").classList.remove("active"); lastMsgHash = ""; fetchMessages(); };
+document.getElementById("chat-search-input").oninput = function() { chatSearchFilter = this.value.trim().toLowerCase(); lastMsgHash = ""; fetchMessages(true); };
+document.getElementById("close-chat-search").onclick = function() { chatSearchFilter = ""; document.getElementById("chat-search-bar").classList.remove("active"); lastMsgHash = ""; fetchMessages(true); };
 
 document.getElementById("menu-mute-chat").onclick = function() {
   document.getElementById("chat-dots-menu").classList.remove("active");
@@ -498,7 +545,7 @@ document.getElementById("menu-clear-chat").onclick = async function() {
   const data = await res.json();
   const docs = data.documents || [];
   for (let i = 0; i < docs.length; i++) { await fetch("https://" + host + "/v1/" + docs[i].name, { method: "DELETE" }); }
-  lastMsgHash = ""; fetchMessages();
+  lastMsgHash = ""; fetchMessages(true);
 };
 document.getElementById("menu-block-chat").onclick = function() {
   document.getElementById("chat-dots-menu").classList.remove("active");
@@ -506,7 +553,6 @@ document.getElementById("menu-block-chat").onclick = function() {
   if (confirm("Remove and block " + activeChatTitle + "?")) { delete savedContacts[activePeerPhone]; localStorage.setItem("ts_contacts", JSON.stringify(savedContacts)); goBackHome(); }
 };
 
-// Emoji & Typing
 document.getElementById("emoji-btn").onclick = function() { document.getElementById("emoji-bar").classList.toggle("active"); };
 document.querySelectorAll("#emoji-bar span").forEach(function(sp) {
   sp.onclick = function() {
@@ -523,7 +569,7 @@ document.getElementById("msg-input").addEventListener("input", function() {
   }
 });
 
-// Message Action Sheet (Reply, Forward, Copy, Delete)
+// Message Action Sheet
 document.getElementById("act-cancel").onclick = function() { document.getElementById("msg-action-sheet").classList.remove("active"); };
 document.getElementById("act-reply").onclick = function() {
   document.getElementById("msg-action-sheet").classList.remove("active");
@@ -540,7 +586,7 @@ document.getElementById("act-delete").onclick = async function() {
   document.getElementById("msg-action-sheet").classList.remove("active");
   if (selectedMsgObj && confirm("Delete message for everyone?")) {
     await fetch("https://" + host + "/v1/" + selectedMsgObj.docName, { method: "DELETE" });
-    lastMsgHash = ""; fetchMessages();
+    lastMsgHash = ""; fetchMessages(false);
   }
 };
 document.getElementById("act-forward").onclick = function() {
@@ -579,15 +625,22 @@ async function sendForward(targetRoomId, targetTitle) {
 
 document.getElementById("cancel-reply-btn").onclick = function() { replyToText = ""; document.getElementById("reply-bar").style.display = "none"; };
 
-async function fetchMessages() {
+async function fetchMessages(forceScrollBottom) {
   if (!activeChatId) return;
   try {
-    const res = await fetch(BASE_URL + "/chats/" + encodeURIComponent(activeChatId) + "/messages?pageSize=100");
+    const res = await fetch(BASE_URL + "/chats/" + encodeURIComponent(activeChatId) + "/messages?pageSize=200");
     const data = await res.json();
     const docs = (data.documents || []).sort(function(a, b) { return Number(a.fields.time.integerValue) - Number(b.fields.time.integerValue); });
     const h = docs.map(function(d) { return d.name + ":" + (d.fields.read ? d.fields.read.booleanValue : false); }).join(",") + "|" + chatSearchFilter;
-    if (h === lastMsgHash) return; lastMsgHash = h;
-    const box = document.getElementById("messages-container"); box.innerHTML = "";
+    if (h === lastMsgHash) return;
+    lastMsgHash = h;
+
+    const box = document.getElementById("messages-container");
+    const isNearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 120;
+    const prevScrollHeight = box.scrollHeight;
+    const prevScrollTop = box.scrollTop;
+
+    box.innerHTML = "";
     for (let i = 0; i < docs.length; i++) {
       const docObj = docs[i], f = docObj.fields, sP = normPhone(f.sender.stringValue), isMe = sP === me.phone;
       const isRead = f.read && f.read.booleanValue === true;
@@ -619,7 +672,12 @@ async function fetchMessages() {
       };
       div.appendChild(meta); box.appendChild(div);
     }
-    box.scrollTop = box.scrollHeight;
+
+    if (forceScrollBottom || isNearBottom) {
+      box.scrollTop = box.scrollHeight;
+    } else {
+      box.scrollTop = prevScrollTop + (box.scrollHeight - prevScrollHeight);
+    }
   } catch (e) {}
 }
 
@@ -631,7 +689,7 @@ async function postChatPayload(pT, mT, pU) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ fields: { sender: { stringValue: me.phone }, senderName: { stringValue: me.name }, text: { stringValue: pT ? await encryptText(pT, activeChatId) : "" }, replyTo: { stringValue: repEnc }, mediaType: { stringValue: mT || "text" }, mediaUrl: { stringValue: pU ? await encryptText(pU, activeChatId) : "" }, read: { booleanValue: false }, time: { integerValue: String(Date.now()) } } })
   });
-  lastMsgHash = ""; fetchMessages();
+  lastMsgHash = ""; fetchMessages(true);
 }
 
 document.getElementById("send-msg-btn").onclick = function() { const i = document.getElementById("msg-input"), t = i.value.trim(); if (t && activeChatId) { i.value = ""; postChatPayload(t, "text", ""); } };
@@ -670,14 +728,20 @@ document.getElementById("media-picker").onchange = async function(e) {
   } catch (err) {} b.style.display = "none";
 };
 
-// FIXED WEBRTC AUDIO & VIDEO CALLS
-const ICE_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }] };
+// REBUILT WEBRTC CALLS (OUTGOING + INCOMING + PROPER PICKUP)
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" }
+  ]
+};
 
 async function startDirectCall(isVideo) {
   if (!activePeerPhone && !isGroupChat) return;
   if (isGroupChat) return alert("Direct call 1-on-1 chat ke liye hai!");
   document.getElementById("call-peer-name").innerText = activeChatTitle;
-  document.getElementById("call-status-text").innerText = "Calling...";
+  document.getElementById("call-status-text").innerText = "Connecting mic/camera...";
   document.getElementById("incoming-controls").style.display = "none";
   document.getElementById("active-controls").style.display = "flex";
   document.getElementById("call-overlay").classList.add("active");
@@ -695,7 +759,7 @@ async function startDirectCall(isVideo) {
     await new Promise(function(r) {
       if (pc.iceGatheringState === "complete") return r();
       pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === "complete") r(); };
-      setTimeout(r, 1500);
+      setTimeout(r, 2000);
     });
     const res = await fetch(BASE_URL + "/calls", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -710,18 +774,21 @@ async function startDirectCall(isVideo) {
     const docData = await res.json();
     activeCallDocId = docData.name;
     document.getElementById("call-status-text").innerText = "Ringing...";
+    if (callPollTimer) clearInterval(callPollTimer);
     callPollTimer = setInterval(async function() {
       if (!activeCallDocId) return;
-      const r = await fetch("https://" + host + "/v1/" + activeCallDocId);
-      const d = await r.json();
-      if (!d.fields) return;
-      const st = d.fields.status.stringValue;
-      if (st === "ended") { closeCallUI(); }
-      else if (st === "answered" && d.fields.answer.stringValue && !pc.currentRemoteDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(d.fields.answer.stringValue)));
-        document.getElementById("call-status-text").innerText = "In Call";
-      }
-    }, 1800);
+      try {
+        const r = await fetch("https://" + host + "/v1/" + activeCallDocId);
+        const d = await r.json();
+        if (!d.fields) return;
+        const st = d.fields.status.stringValue;
+        if (st === "ended") { closeCallUI(); }
+        else if (st === "answered" && d.fields.answer.stringValue && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(d.fields.answer.stringValue)));
+          document.getElementById("call-status-text").innerText = "In Call";
+        }
+      } catch (e) {}
+    }, 1500);
   } catch (e) { alert("Camera/Mic permission allow karein!"); closeCallUI(); }
 }
 
@@ -733,8 +800,9 @@ async function checkIncomingCalls() {
     const docs = data.documents || [];
     for (let i = 0; i < docs.length; i++) {
       const f = docs[i].fields;
-      if (f && f.receiverPhone && normPhone(f.receiverPhone.stringValue) === me.phone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 45000) {
+      if (f && f.receiverPhone && normPhone(f.receiverPhone.stringValue) === me.phone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 50000) {
         activeCallDocId = docs[i].name;
+        incomingCallData = f;
         const cPhone = normPhone(f.callerPhone.stringValue);
         const callerTitle = savedContacts[cPhone] || f.caller.stringValue;
         document.getElementById("call-peer-name").innerText = callerTitle;
@@ -745,47 +813,59 @@ async function checkIncomingCalls() {
         startRinging();
         notifyUser("Incoming " + f.type.stringValue, callerTitle + " is calling you...", "");
 
+        if (callPollTimer) clearInterval(callPollTimer);
         callPollTimer = setInterval(async function() {
           if (!activeCallDocId) return;
-          const r = await fetch("https://" + host + "/v1/" + activeCallDocId);
-          const d = await r.json();
-          if (d.fields && d.fields.status.stringValue === "ended") closeCallUI();
-        }, 2000);
-
-        document.getElementById("accept-call-btn").onclick = async function() {
-          stopRinging();
           try {
-            const isVid = f.type.stringValue === "Video Call";
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVid });
-            document.getElementById("local-video").srcObject = localStream;
-            pc = new RTCPeerConnection(ICE_CONFIG);
-            localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
-            pc.ontrack = function(ev) {
-              if (ev.streams && ev.streams[0]) document.getElementById("remote-video").srcObject = ev.streams[0];
-            };
-            await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(f.offer.stringValue)));
-            const ans = await pc.createAnswer();
-            await pc.setLocalDescription(ans);
-            await new Promise(function(r) {
-              if (pc.iceGatheringState === "complete") return r();
-              pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === "complete") r(); };
-              setTimeout(r, 1500);
-            });
-            await fetch("https://" + host + "/v1/" + activeCallDocId + "?updateMask.fieldPaths=status&updateMask.fieldPaths=answer", {
-              method: "PATCH", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fields: { status: { stringValue: "answered" }, answer: { stringValue: JSON.stringify(pc.localDescription) } } })
-            });
-            document.getElementById("incoming-controls").style.display = "none";
-            document.getElementById("active-controls").style.display = "flex";
-            document.getElementById("call-status-text").innerText = "Connected";
-          } catch (err) { alert("Mic/Camera error: " + err.message); endDirectCall(); }
-        };
-        document.getElementById("reject-call-btn").onclick = endDirectCall;
+            const r = await fetch("https://" + host + "/v1/" + activeCallDocId);
+            const d = await r.json();
+            if (d.fields && d.fields.status.stringValue === "ended") closeCallUI();
+          } catch (e) {}
+        }, 1800);
         break;
       }
     }
   } catch (e) {}
 }
+
+// Direct static click handlers for Call Accept / Reject
+document.getElementById("accept-call-btn").onclick = async function() {
+  if (!activeCallDocId || !incomingCallData) return;
+  stopRinging();
+  document.getElementById("call-status-text").innerText = "Connecting...";
+  document.getElementById("incoming-controls").style.display = "none";
+  document.getElementById("active-controls").style.display = "flex";
+  try {
+    const isVid = incomingCallData.type.stringValue === "Video Call";
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVid });
+    document.getElementById("local-video").srcObject = localStream;
+    pc = new RTCPeerConnection(ICE_CONFIG);
+    localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
+    pc.ontrack = function(ev) {
+      if (ev.streams && ev.streams[0]) document.getElementById("remote-video").srcObject = ev.streams[0];
+      document.getElementById("call-status-text").innerText = "In Call";
+    };
+    await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(incomingCallData.offer.stringValue)));
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    await new Promise(function(r) {
+      if (pc.iceGatheringState === "complete") return r();
+      pc.onicegatheringstatechange = function() { if (pc.iceGatheringState === "complete") r(); };
+      setTimeout(r, 2000);
+    });
+    await fetch("https://" + host + "/v1/" + activeCallDocId + "?updateMask.fieldPaths=status&updateMask.fieldPaths=answer", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: { status: { stringValue: "answered" }, answer: { stringValue: JSON.stringify(pc.localDescription) } } })
+    });
+    document.getElementById("call-status-text").innerText = "Connected";
+  } catch (err) {
+    alert("Call connect error: " + err.message);
+    endDirectCall();
+  }
+};
+
+document.getElementById("reject-call-btn").onclick = endDirectCall;
+document.getElementById("end-call-btn").onclick = endDirectCall;
 
 async function endDirectCall() {
   stopRinging();
@@ -802,12 +882,11 @@ function closeCallUI() {
   if (callPollTimer) clearInterval(callPollTimer);
   if (localStream) localStream.getTracks().forEach(function(t) { t.stop(); });
   if (pc) pc.close();
-  pc = null; localStream = null; activeCallDocId = null;
+  pc = null; localStream = null; activeCallDocId = null; incomingCallData = null;
   document.getElementById("remote-video").srcObject = null;
   document.getElementById("local-video").srcObject = null;
   document.getElementById("call-overlay").classList.remove("active");
 }
-document.getElementById("end-call-btn").onclick = endDirectCall;
 document.getElementById("mute-call-btn").onclick = function() {
   if (!localStream) return;
   const tr = localStream.getAudioTracks()[0];
@@ -816,7 +895,7 @@ document.getElementById("mute-call-btn").onclick = function() {
 document.getElementById("voice-call-btn").onclick = function() { startDirectCall(false); };
 document.getElementById("video-call-btn").onclick = function() { startDirectCall(true); };
 
-// STATUS (Text + Photo + 24h Expiry)
+// STATUS
 document.getElementById("add-status-item").onclick = function() {
   tempStatusImg = "";
   document.getElementById("status-img-preview").style.display = "none";
@@ -862,7 +941,7 @@ async function loadStatuses() {
       const imgUrl = f.image ? f.image.stringValue : "";
       const row = createListRow(author, f.text.stringValue || "Photo Status", false, true, imgUrl, fmtTime(ts), 0);
       row.onclick = function() {
-        document.getElementById("viewer-author").innerText = author + " • " + fmtTime(ts);
+        document.getElementById("viewer-author").innerText = author + " \u2022 " + fmtTime(ts);
         const vImg = document.getElementById("viewer-img");
         if (imgUrl) { vImg.src = imgUrl; vImg.style.display = "block"; } else { vImg.style.display = "none"; }
         document.getElementById("viewer-text").innerText = f.text.stringValue || "";

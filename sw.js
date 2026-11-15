@@ -5,6 +5,29 @@ let myContacts = {};
 let seenCallIds = {};
 let seenMsgCounts = {};
 
+function loadStateFromDB() {
+  return new Promise(function(resolve) {
+    try {
+      const req = indexedDB.open("TeamServisDB", 1);
+      req.onupgradeneeded = function(ev) { ev.target.result.createObjectStore("state"); };
+      req.onsuccess = function(ev) {
+        const db = ev.target.result;
+        const tx = db.transaction("state", "readonly");
+        const getReq = tx.objectStore("state").get("user_info");
+        getReq.onsuccess = function() {
+          if (getReq.result) {
+            myPhone = getReq.result.phone || myPhone;
+            myContacts = getReq.result.contacts || myContacts;
+          }
+          resolve();
+        };
+        getReq.onerror = function() { resolve(); };
+      };
+      req.onerror = function() { resolve(); };
+    } catch (e) { resolve(); }
+  });
+}
+
 self.addEventListener("install", function(e) {
   self.skipWaiting();
 });
@@ -27,14 +50,14 @@ function normP(p) {
 }
 
 async function pollBackground() {
+  if (!myPhone) await loadStateFromDB();
   if (!myPhone) return;
   try {
-    // 1. Check Incoming Calls
     const cRes = await fetch(BASE_URL + "/calls?pageSize=15");
     const cData = await cRes.json();
     (cData.documents || []).forEach(function(doc) {
       const f = doc.fields;
-      if (f && f.receiverPhone && normP(f.receiverPhone.stringValue) === myPhone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 40000) {
+      if (f && f.receiverPhone && normP(f.receiverPhone.stringValue) === myPhone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 45000) {
         if (!seenCallIds[doc.name]) {
           seenCallIds[doc.name] = true;
           const cp = normP(f.callerPhone.stringValue);
@@ -49,7 +72,6 @@ async function pollBackground() {
       }
     });
 
-    // 2. Check New Messages in Saved Contacts
     const peers = Object.keys(myContacts);
     for (let i = 0; i < peers.length; i++) {
       const roomId = [myPhone, peers[i]].sort().join("_");
@@ -73,7 +95,7 @@ async function pollBackground() {
   } catch (e) {}
 }
 
-setInterval(pollBackground, 5000);
+setInterval(pollBackground, 4500);
 
 self.addEventListener("notificationclick", function(event) {
   event.notification.close();
