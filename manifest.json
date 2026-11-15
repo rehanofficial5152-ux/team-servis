@@ -1,0 +1,9 @@
+{
+  "name": "Team Servis",
+  "short_name": "Team Servis",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#b71c1c",
+  "theme_color": "#b71c1c",
+  "description": "Team Servis Private Messenger - Owner: Rehan Nasir"
+}
