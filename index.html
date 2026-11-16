@@ -3,19 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="theme-color" content="#b71c1c" />
   <link rel="manifest" href="./manifest.json" />
   <title>Team Servis</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
     html, body {
-      width: 100%; height: 100%; background: #dcdcdc; display: flex; justify-content: center;
-      overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y;
+      width: 100%; height: 100%; position: fixed; inset: 0;
+      background: #dcdcdc; display: flex; justify-content: center;
+      overflow: hidden; overscroll-behavior: none !important;
     }
     .app-container {
       width: 100%; max-width: 420px; background: #fff; display: flex; flex-direction: column;
       height: 100%; box-shadow: 0 2px 14px rgba(0,0,0,0.25); position: relative; overflow: hidden;
-      overscroll-behavior: none;
+      overscroll-behavior: none !important;
     }
     .wa-header { background: #b71c1c; color: #fff; padding: 10px 14px 0 14px; flex-shrink: 0; user-select: none; }
     .wa-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -31,7 +35,6 @@
     .screen { display: none; flex: 1; flex-direction: column; overflow: hidden; height: 100%; width: 100%; position: absolute; inset: 0; background: #fff; }
     .screen.active { display: flex; }
 
-    /* Fixed Layout Views (No overlapping bug) */
     .tabs-content-area { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
     .tab-view {
       display: none; flex: 1; flex-direction: column;
@@ -74,7 +77,7 @@
     .messages {
       flex: 1; padding: 12px; overflow-y: auto; overflow-x: hidden; background: #efeae2;
       display: flex; flex-direction: column; gap: 6px;
-      overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y;
+      overscroll-behavior-y: contain !important; -webkit-overflow-scrolling: touch;
     }
     .msg { max-width: 78%; padding: 6px 10px; border-radius: 8px; font-size: 14px; line-height: 1.35; word-wrap: break-word; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; cursor: pointer; flex-shrink: 0; }
     .msg.me { align-self: flex-end; background: #ffcdd2; color: #111; border-top-right-radius: 0; }
@@ -106,9 +109,11 @@
     .action-sheet div:hover { background: #ffebee; color: #b71c1c; }
     .status-viewer { display: none; position: absolute; inset: 0; background: #8e0000; color: #fff; flex-direction: column; justify-content: center; align-items: center; padding: 24px; text-align: center; z-index: 20; }
     .status-viewer.active { display: flex; }
-    .call-overlay { display: none; position: absolute; inset: 0; background: #1a1a1a; color: #fff; flex-direction: column; justify-content: space-between; align-items: center; padding: 24px 16px; z-index: 30; }
+    .call-overlay { display: none; position: absolute; inset: 0; background: #1a1a1a; color: #fff; flex-direction: column; justify-content: space-between; align-items: center; padding: 28px 16px; z-index: 30; }
     .call-overlay.active { display: flex; }
     .video-stage { position: relative; width: 100%; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 12px; background: #2b2b2b; margin: 12px 0; }
+    .audio-stage { flex: 1; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+    .audio-avatar { width: 110px; height: 110px; border-radius: 50%; background: #b71c1c; color: #fff; font-size: 44px; font-weight: bold; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 12px rgba(183,28,28,0.25); }
     #remote-video { width: 100%; height: 100%; object-fit: cover; }
     #local-video { position: absolute; bottom: 10px; right: 10px; width: 85px; height: 120px; object-fit: cover; border-radius: 8px; border: 2px solid #fff; background: #000; }
     .call-controls { display: flex; gap: 24px; align-items: center; z-index: 35; }
@@ -163,7 +168,6 @@
     </div>
 
     <div class="tabs-content-area" id="tabs-swipe-area">
-      <!-- Tab 0: CHATS -->
       <div id="chats-view" class="tab-view active">
         <div style="padding:6px 10px; background:#fff; border-bottom:1px solid #f0f0f0; flex-shrink:0;">
           <input type="text" id="search-contact-input" placeholder="Search contacts or groups..." style="padding:7px 12px; font-size:13px; border-radius:18px;" />
@@ -172,7 +176,6 @@
         <button class="fab" id="fab-contact-btn" title="Phone Contacts">+</button>
       </div>
 
-      <!-- Tab 1: STATUS -->
       <div id="status-view" class="tab-view">
         <div class="list-item" id="add-status-item">
           <div class="avatar">+</div>
@@ -182,7 +185,6 @@
         <div id="status-list" style="flex:1; overflow-y:auto;"></div>
       </div>
 
-      <!-- Tab 2: CALLS -->
       <div id="calls-view" class="tab-view">
         <div id="calls-list" style="flex:1; overflow-y:auto;"></div>
       </div>
@@ -201,7 +203,7 @@
       </div>
       <div class="wa-icons">
         <button id="video-call-btn" title="Video Call">&#128249;</button>
-        <button id="voice-call-btn" title="Voice Call">&#128222;</button>
+        <button id="voice-call-btn" title="Audio Call">&#128222;</button>
         <button id="chat-dots-btn" title="Menu" style="font-size:20px; font-weight:bold;">&#8942;</button>
       </div>
       <div class="dots-menu" id="chat-dots-menu">
@@ -240,7 +242,6 @@
     </div>
   </div>
 
-  <!-- Message Action Menu -->
   <div class="action-sheet-bg" id="msg-action-sheet">
     <div class="action-sheet">
       <div id="act-reply">&#8617; Reply</div>
@@ -251,7 +252,6 @@
     </div>
   </div>
 
-  <!-- Forward Modal -->
   <div id="forward-modal" class="modal">
     <div class="chat-header">
       <div class="chat-header-left">
@@ -262,15 +262,25 @@
     <div id="forward-list" style="flex:1; overflow-y:auto;"></div>
   </div>
 
+  <!-- CALL SCREEN (Separate Audio & Video Stages) -->
   <div id="call-overlay" class="call-overlay">
     <div style="text-align:center;">
-      <h3 id="call-peer-name" style="font-size:20px;">Member</h3>
+      <span id="call-type-badge" style="font-size:11px; background:#b71c1c; padding:3px 10px; border-radius:12px;">VOICE CALL</span>
+      <h3 id="call-peer-name" style="font-size:22px; margin-top:8px;">Member</h3>
       <p id="call-status-text" style="font-size:13px; color:#ccc; margin-top:4px;">Ringing...</p>
     </div>
-    <div class="video-stage">
+
+    <div class="audio-stage" id="audio-stage">
+      <div class="audio-avatar" id="audio-call-avatar">M</div>
+      <p style="font-size:12px; color:#aaa;">End-to-End Encrypted Audio</p>
+      <audio id="remote-audio" autoplay playsinline></audio>
+    </div>
+
+    <div class="video-stage" id="video-stage">
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video" autoplay playsinline muted></video>
     </div>
+
     <div class="call-controls" id="incoming-controls" style="display:none;">
       <button type="button" class="call-btn-circle" id="accept-call-btn" style="background:#2e7d32;">&#128222;</button>
       <button type="button" class="call-btn-circle" id="reject-call-btn" style="background:#c62828;">&#128245;</button>
@@ -369,6 +379,6 @@
     <p id="viewer-text" style="font-size:20px; line-height:1.4;"></p>
   </div>
 </div>
-<script src="./app.js?v=45"></script>
+<script src="./app.js?v=50"></script>
 </body>
 </html>

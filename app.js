@@ -12,6 +12,26 @@ let pc = null, localStream = null, activeCallDocId = null, incomingCallData = nu
 let mediaRecorder = null, audioChunks = [], lastNotifiedMsgId = "", tempDpData = "", tempStatusImg = "";
 let selectedMsgObj = null, forwardPayload = null, deferredInstallPrompt = null, currentTabIdx = 0;
 
+// Block Pull-to-Refresh strictly when scrollTop === 0
+let lastTouchY = 0;
+document.addEventListener("touchstart", function(e) {
+  if (e.touches.length === 1) lastTouchY = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener("touchmove", function(e) {
+  const currentY = e.touches[0].clientY;
+  const dy = currentY - lastTouchY;
+  lastTouchY = currentY;
+  if (dy > 0) {
+    let el = e.target;
+    let canScrollUp = false;
+    while (el && el !== document.body) {
+      if (el.scrollTop > 0) { canScrollUp = true; break; }
+      el = el.parentElement;
+    }
+    if (!canScrollUp && e.cancelable) e.preventDefault();
+  }
+}, { passive: false });
+
 function askNotifPermissionSafe() {
   try {
     if ("Notification" in window && Notification.permission === "default") {
@@ -33,7 +53,8 @@ function saveSwStateToDB(phone, contacts) {
 }
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").then(function(reg) {
+  navigator.serviceWorker.register("./sw.js?v=50").then(function(reg) {
+    reg.update();
     if (me) {
       saveSwStateToDB(me.phone, savedContacts);
       if (reg.active) reg.active.postMessage({ type: "SET_USER", phone: me.phone, contacts: savedContacts });
@@ -162,7 +183,6 @@ function goBackHome() {
   loadChatsAndGroups();
 }
 
-// FIXED TAB SWITCHING (CHATS / STATUS / CALLS)
 const tabIds = ["chats-view", "status-view", "calls-view"];
 function switchHomeTab(idx) {
   if (idx < 0) idx = 0;
@@ -755,6 +775,7 @@ document.getElementById("media-picker").onchange = async function(e) {
   } catch (err) {} b.style.display = "none";
 };
 
+// STRICT AUDIO vs VIDEO CALL UI & STREAMING
 const ICE_CONFIG = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
@@ -763,21 +784,32 @@ const ICE_CONFIG = {
   ]
 };
 
+function setupCallStage(isVideo, peerTitle) {
+  document.getElementById("call-peer-name").innerText = peerTitle;
+  document.getElementById("call-type-badge").innerText = isVideo ? "VIDEO CALL" : "AUDIO CALL";
+  document.getElementById("audio-call-avatar").innerText = (peerTitle || "M").charAt(0).toUpperCase();
+  document.getElementById("video-stage").style.display = isVideo ? "flex" : "none";
+  document.getElementById("audio-stage").style.display = isVideo ? "none" : "flex";
+}
+
 async function startDirectCall(isVideo) {
   if (!activePeerPhone && !isGroupChat) return;
   if (isGroupChat) return alert("Direct call 1-on-1 chat ke liye hai!");
-  document.getElementById("call-peer-name").innerText = activeChatTitle;
-  document.getElementById("call-status-text").innerText = "Connecting mic/camera...";
+  setupCallStage(isVideo, activeChatTitle);
+  document.getElementById("call-status-text").innerText = isVideo ? "Starting camera..." : "Connecting audio...";
   document.getElementById("incoming-controls").style.display = "none";
   document.getElementById("active-controls").style.display = "flex";
   document.getElementById("call-overlay").classList.add("active");
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
-    document.getElementById("local-video").srcObject = localStream;
+    if (isVideo) document.getElementById("local-video").srcObject = localStream;
     pc = new RTCPeerConnection(ICE_CONFIG);
     localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
     pc.ontrack = function(ev) {
-      if (ev.streams && ev.streams[0]) document.getElementById("remote-video").srcObject = ev.streams[0];
+      if (ev.streams && ev.streams[0]) {
+        if (isVideo) document.getElementById("remote-video").srcObject = ev.streams[0];
+        else document.getElementById("remote-audio").srcObject = ev.streams[0];
+      }
       document.getElementById("call-status-text").innerText = "Connected";
     };
     const offer = await pc.createOffer();
@@ -815,7 +847,7 @@ async function startDirectCall(isVideo) {
         }
       } catch (e) {}
     }, 1500);
-  } catch (e) { alert("Camera/Mic permission allow karein!"); closeCallUI(); }
+  } catch (e) { alert("Permission error: " + e.message); closeCallUI(); }
 }
 
 async function checkIncomingCalls() {
@@ -829,9 +861,10 @@ async function checkIncomingCalls() {
       if (f && f.receiverPhone && normPhone(f.receiverPhone.stringValue) === me.phone && f.status.stringValue === "ringing" && (Date.now() - Number(f.time.integerValue)) < 50000) {
         activeCallDocId = docs[i].name;
         incomingCallData = f;
+        const isVid = f.type.stringValue === "Video Call";
         const cPhone = normPhone(f.callerPhone.stringValue);
         const callerTitle = savedContacts[cPhone] || f.caller.stringValue;
-        document.getElementById("call-peer-name").innerText = callerTitle;
+        setupCallStage(isVid, callerTitle);
         document.getElementById("call-status-text").innerText = "Incoming " + f.type.stringValue + "...";
         document.getElementById("incoming-controls").style.display = "flex";
         document.getElementById("active-controls").style.display = "none";
@@ -857,17 +890,21 @@ async function checkIncomingCalls() {
 document.getElementById("accept-call-btn").onclick = async function() {
   if (!activeCallDocId || !incomingCallData) return;
   stopRinging();
+  const isVid = incomingCallData.type.stringValue === "Video Call";
+  setupCallStage(isVid, document.getElementById("call-peer-name").innerText);
   document.getElementById("call-status-text").innerText = "Connecting...";
   document.getElementById("incoming-controls").style.display = "none";
   document.getElementById("active-controls").style.display = "flex";
   try {
-    const isVid = incomingCallData.type.stringValue === "Video Call";
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVid });
-    document.getElementById("local-video").srcObject = localStream;
+    if (isVid) document.getElementById("local-video").srcObject = localStream;
     pc = new RTCPeerConnection(ICE_CONFIG);
     localStream.getTracks().forEach(function(tr) { pc.addTrack(tr, localStream); });
     pc.ontrack = function(ev) {
-      if (ev.streams && ev.streams[0]) document.getElementById("remote-video").srcObject = ev.streams[0];
+      if (ev.streams && ev.streams[0]) {
+        if (isVid) document.getElementById("remote-video").srcObject = ev.streams[0];
+        else document.getElementById("remote-audio").srcObject = ev.streams[0];
+      }
       document.getElementById("call-status-text").innerText = "In Call";
     };
     await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(incomingCallData.offer.stringValue)));
@@ -910,6 +947,7 @@ function closeCallUI() {
   pc = null; localStream = null; activeCallDocId = null; incomingCallData = null;
   document.getElementById("remote-video").srcObject = null;
   document.getElementById("local-video").srcObject = null;
+  document.getElementById("remote-audio").srcObject = null;
   document.getElementById("call-overlay").classList.remove("active");
 }
 document.getElementById("mute-call-btn").onclick = function() {
@@ -920,6 +958,7 @@ document.getElementById("mute-call-btn").onclick = function() {
 document.getElementById("voice-call-btn").onclick = function() { startDirectCall(false); };
 document.getElementById("video-call-btn").onclick = function() { startDirectCall(true); };
 
+// STATUS
 document.getElementById("add-status-item").onclick = function() {
   tempStatusImg = "";
   document.getElementById("status-img-preview").style.display = "none";
@@ -981,7 +1020,7 @@ async function loadCalls() {
   const list = document.getElementById("calls-list"); list.innerHTML = "";
   try {
     const res = await fetch(BASE_URL + "/calls?pageSize=50"); const data = await res.json();
-    (data.documents || []).sort(function(a, b) { return Number(b.fields.time.integerValue) - Number(b.fields.time.integerValue); }).forEach(function(d) {
+    (data.documents || []).sort(function(a, b) { return Number(b.fields.time.integerValue) - Number(a.fields.time.integerValue); }).forEach(function(d) {
       const f = d.fields, cP = f.callerPhone ? normPhone(f.callerPhone.stringValue) : "", rP = f.receiverPhone ? normPhone(f.receiverPhone.stringValue) : "";
       if (cP !== me.phone && rP !== me.phone) return;
       const isOut = cP === me.phone;
