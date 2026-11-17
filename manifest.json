@@ -1,8 +1,8 @@
 {
   "name": "Team Servis",
   "short_name": "Team Servis",
-  "start_url": "/team-servis/",
-  "scope": "/team-servis/",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#b71c1c",
   "theme_color": "#b71c1c",
