@@ -1,15 +1,17 @@
 {
   "name": "Team Servis",
   "short_name": "Team Servis",
-  "start_url": "./index.html",
+  "start_url": "/team-servis/",
+  "scope": "/team-servis/",
   "display": "standalone",
   "background_color": "#b71c1c",
   "theme_color": "#b71c1c",
   "icons": [
     {
-      "src": "https://github.githubassets.com/favicons/favicon.png",
+      "src": "./icon.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
