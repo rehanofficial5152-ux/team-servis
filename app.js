@@ -1032,3 +1032,77 @@ async function loadCalls() {
 }
 
 if (me) startApp();
+// 1. Service Worker Register karein (Lock screen popup ke liye zaroori)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(console.error);
+}
+
+// 2. Three Dots Menu Logic
+function toggleMainMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('whatsappDropdown');
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+document.addEventListener('click', () => {
+  const menu = document.getElementById('whatsappDropdown');
+  if (menu) menu.style.display = 'none';
+});
+function openSettingsModal() {
+  document.getElementById('settingsModal').style.display = 'flex';
+}
+function closeSettingsModal() {
+  document.getElementById('settingsModal').style.display = 'none';
+}
+function openMenuFeature(name) {
+  alert(name + ' feature active hai!');
+}
+
+// 3. Message Tune (Clean WhatsApp-style double chime)
+function playMessageTune() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    [587.33, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+      gain.gain.setValueAtTime(0.25, now + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.35);
+    });
+  } catch (e) {}
+}
+
+// 4. Lock Screen + Unlocked Popup Notification Trigger
+async function triggerPopupNotification(senderName, messageText) {
+  playMessageTune();
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'granted') {
+    await Notification.requestPermission();
+  }
+  if (Notification.permission === 'granted') {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const options = {
+      body: messageText,
+      icon: './icon.png',
+      badge: './icon.png',
+      vibrate: [200, 100, 200],
+      tag: 'team-servis-msg',
+      renotify: true,
+      requireInteraction: true // Heads-up popup screen par rukne ke liye
+    };
+    if (reg) {
+      reg.showNotification(senderName || 'Team Servis', options);
+    } else {
+      new Notification(senderName || 'Team Servis', options);
+    }
+  }
+}
+
+function testNotificationSound() {
+  triggerPopupNotification('Team Servis', 'New message alert! Lock & unlock popup active.');
+}
