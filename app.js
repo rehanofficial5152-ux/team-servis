@@ -96,6 +96,26 @@ function playTone(freq, dur) {
     osc.start(); setTimeout(function() { osc.stop(); ctx.close(); }, dur);
   } catch (e) {}
 }
+function playMessageTune() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    [587.33, 880].forEach(function(freq, i) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + i * 0.12);
+      gain.gain.setValueAtTime(0.28, now + i * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.35);
+    });
+  } catch (e) {}
+}
 function startRinging() {
   stopRinging();
   playTone(540, 450);
@@ -108,18 +128,44 @@ function stopRinging() {
 }
 function notifyUser(title, body, chatId) {
   if (chatId && mutedChats[chatId]) return;
-  playTone(880, 180);
+  playMessageTune();
   try {
     if ("Notification" in window && Notification.permission === "granted") {
+      const opts = {
+        body: body,
+        icon: "./icon.png",
+        badge: "./icon.png",
+        vibrate: [300, 150, 300],
+        tag: chatId || "ts_alert",
+        renotify: true,
+        requireInteraction: true
+      };
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.ready.then(function(reg) {
-          reg.showNotification(title, { body: body, vibrate: [300, 150, 300], tag: chatId || "ts_alert" });
-        }).catch(function() { new Notification(title, { body: body }); });
+          reg.showNotification(title, opts);
+        }).catch(function() { new Notification(title, opts); });
       } else {
-        new Notification(title, { body: body });
+        new Notification(title, opts);
       }
     }
   } catch (e) {}
+}
+
+async function forceRefreshApp(e) {
+  if (e) e.stopPropagation();
+  try {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(function(key) { return caches.delete(key); }));
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(function(reg) { return reg.update(); }));
+    }
+  } catch (err) {}
+  const url = new URL(window.location.href);
+  url.searchParams.set("v", Date.now());
+  window.location.replace(url.toString());
 }
 
 async function getRoomCryptoKey(roomId) {
@@ -334,7 +380,9 @@ function startApp() {
   setInterval(backgroundRoomPoll, 4500);
 }
 
-document.getElementById("refresh-btn").onclick = function() { loadChatsAndGroups(); loadStatuses(); loadCalls(); };
+const refreshBtnEl = document.getElementById("refresh-btn");
+if (refreshBtnEl) refreshBtnEl.onclick = forceRefreshApp;
+
 document.getElementById("logout-btn").onclick = function() { localStorage.removeItem("ts_user"); me = null; if (chatTimer) clearInterval(chatTimer); showScreen("login-screen"); };
 
 async function triggerPhonebook() {
@@ -1031,78 +1079,29 @@ async function loadCalls() {
   } catch (e) {}
 }
 
-if (me) startApp();
-// 1. Service Worker Register karein (Lock screen popup ke liye zaroori)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(console.error);
-}
-
-// 2. Three Dots Menu Logic
+// Three Dots Menu & Settings Helpers (if present in HTML)
 function toggleMainMenu(e) {
-  e.stopPropagation();
-  const menu = document.getElementById('whatsappDropdown');
-  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  if (e) e.stopPropagation();
+  const menu = document.getElementById("whatsappDropdown");
+  if (menu) menu.style.display = menu.style.display === "block" ? "none" : "block";
 }
-document.addEventListener('click', () => {
-  const menu = document.getElementById('whatsappDropdown');
-  if (menu) menu.style.display = 'none';
+document.addEventListener("click", function() {
+  const menu = document.getElementById("whatsappDropdown");
+  if (menu) menu.style.display = "none";
 });
 function openSettingsModal() {
-  document.getElementById('settingsModal').style.display = 'flex';
+  const modal = document.getElementById("settingsModal");
+  if (modal) modal.style.display = "flex";
 }
 function closeSettingsModal() {
-  document.getElementById('settingsModal').style.display = 'none';
+  const modal = document.getElementById("settingsModal");
+  if (modal) modal.style.display = "none";
 }
 function openMenuFeature(name) {
-  alert(name + ' feature active hai!');
+  alert(name + " feature active hai!");
 }
-
-// 3. Message Tune (Clean WhatsApp-style double chime)
-function playMessageTune() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const now = ctx.currentTime;
-    [587.33, 880].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + i * 0.12);
-      gain.gain.setValueAtTime(0.25, now + i * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.35);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now + i * 0.12);
-      osc.stop(now + i * 0.12 + 0.35);
-    });
-  } catch (e) {}
-}
-
-// 4. Lock Screen + Unlocked Popup Notification Trigger
-async function triggerPopupNotification(senderName, messageText) {
-  playMessageTune();
-  if (!('Notification' in window)) return;
-  if (Notification.permission !== 'granted') {
-    await Notification.requestPermission();
-  }
-  if (Notification.permission === 'granted') {
-    const reg = await navigator.serviceWorker.getRegistration();
-    const options = {
-      body: messageText,
-      icon: './icon.png',
-      badge: './icon.png',
-      vibrate: [200, 100, 200],
-      tag: 'team-servis-msg',
-      renotify: true,
-      requireInteraction: true // Heads-up popup screen par rukne ke liye
-    };
-    if (reg) {
-      reg.showNotification(senderName || 'Team Servis', options);
-    } else {
-      new Notification(senderName || 'Team Servis', options);
-    }
-  }
-}
-
 function testNotificationSound() {
-  triggerPopupNotification('Team Servis', 'New message alert! Lock & unlock popup active.');
+  notifyUser("Team Servis", "Popup alert aur message tune active hai!", "");
 }
+
+if (me) startApp();
